@@ -17,14 +17,32 @@ void DatabaseManager::start() {
         cout << "CppLiteDB> ";
         getline(cin, command);
 
-        transform(command.begin(), command.end(), command.begin(),
+        string normalized = command;
+
+        transform(normalized.begin(), normalized.end(), normalized.begin(),
                   [](unsigned char c) { return tolower(c); });
 
-        if (command == "exit") {
+        if (normalized == "exit" || normalized == "exit;") {
             cout << "Closing CppLiteDB..." << endl;
             break;
         }
 
-        cout << "Command received: " << command << endl;
+        if (normalized.find("create database ") == 0) {
+
+            string name = normalized.substr(16);
+
+            if (!name.empty() && name.back() == ';') {
+                name.pop_back();
+            }
+
+            if (storage.createDatabase(name)) {
+                cout << "Database '" << name << "' created successfully." << endl;
+            } else {
+                cout << "Error: Database already exists or could not be created." << endl;
+            }
+
+        } else {
+            cout << "Error: Unknown command." << endl;
+        }
     }
 }
