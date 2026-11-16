@@ -9,18 +9,23 @@
 
 using namespace std;
 
-void DatabaseManager::start() {
+void DatabaseManager::start()
+{
     cout << "Welcome to CppLiteDB!" << endl;
     cout << "SQLite-inspired Database Engine" << endl;
     cout << "Type EXIT to close the database." << endl;
 
     string command;
 
-    while (true) {
+    while (true)
+    {
         // Display prompt
-        if (activeDatabase.empty()) {
+        if (activeDatabase.empty())
+        {
             cout << "CppLiteDB> ";
-        } else {
+        }
+        else
+        {
             cout << "CppLiteDB [" << activeDatabase << "]> ";
         }
 
@@ -29,72 +34,89 @@ void DatabaseManager::start() {
         string normalized = command;
 
         transform(normalized.begin(), normalized.end(), normalized.begin(),
-                  [](unsigned char c) {
+                  [](unsigned char c)
+                  {
                       return tolower(c);
                   });
 
-        if (!normalized.empty() && normalized.back() == ';') {
+        if (!normalized.empty() && normalized.back() == ';')
+        {
             normalized.pop_back();
         }
 
-        if (normalized == "exit") {
+        if (normalized == "exit")
+        {
             cout << "Closing CppLiteDB..." << endl;
             break;
         }
 
-        //CREATE
-        else if (normalized.find("create database ") == 0) {
+        // CREATE
+        else if (normalized.find("create database ") == 0)
+        {
 
             string name = normalized.substr(16);
 
-            if (storage.createDatabase(name)) {
+            if (storage.createDatabase(name))
+            {
                 cout << "Database '" << name
                      << "' created successfully." << endl;
-            } else {
+            }
+            else
+            {
                 cout << "Error: Database already exists or could not be created."
                      << endl;
             }
         }
 
-        //SHOW
-        else if (normalized == "show databases") {
+        // SHOW
+        else if (normalized == "show databases")
+        {
 
             vector<string> databases = storage.getDatabases();
 
-            if (databases.empty()) {
+            if (databases.empty())
+            {
                 cout << "No databases found." << endl;
-            } else {
+            }
+            else
+            {
                 cout << "Databases:" << endl;
 
-                for (size_t i = 0; i < databases.size(); i++) {
+                for (size_t i = 0; i < databases.size(); i++)
+                {
                     cout << i + 1 << ". " << databases[i] << endl;
                 }
             }
         }
 
-        //USE
-        else if (normalized.find("use ") == 0) {
+        // USE
+        else if (normalized.find("use ") == 0)
+        {
 
             string name = normalized.substr(4);
 
-            if (storage.databaseExists(name)) {
+            if (storage.databaseExists(name))
+            {
 
                 activeDatabase = name;
 
                 cout << "Database changed to '"
                      << activeDatabase << "'." << endl;
-
-            } else {
+            }
+            else
+            {
                 cout << "Error: Database '" << name
                      << "' does not exist." << endl;
             }
         }
 
-        //CREATE table
-        else if (normalized.find("create table ") == 0) {
+        // CREATE table
+        else if (normalized.find("create table ") == 0)
+        {
 
             // A database must be selected first
-            if (activeDatabase.empty()) {
+            if (activeDatabase.empty())
+            {
                 cout << "Error: Select a database first using USE." << endl;
                 continue;
             }
@@ -105,7 +127,8 @@ void DatabaseManager::start() {
 
             if (openBracket == string::npos ||
                 closeBracket == string::npos ||
-                closeBracket < openBracket) {
+                closeBracket < openBracket)
+            {
 
                 cout << "Error: Invalid CREATE TABLE syntax." << endl;
                 continue;
@@ -113,14 +136,14 @@ void DatabaseManager::start() {
 
             // Extract table name
             string tableName = normalized.substr(
-                13, openBracket - 13
-            );
+                13, openBracket - 13);
 
             // Remove extra spaces from table name
             size_t first = tableName.find_first_not_of(" \t");
             size_t last = tableName.find_last_not_of(" \t");
 
-            if (first == string::npos || last == string::npos) {
+            if (first == string::npos || last == string::npos)
+            {
                 cout << "Error: Invalid table name." << endl;
                 continue;
             }
@@ -130,8 +153,7 @@ void DatabaseManager::start() {
             // Extract column definitions
             string columnDefinitions = normalized.substr(
                 openBracket + 1,
-                closeBracket - openBracket - 1
-            );
+                closeBracket - openBracket - 1);
 
             vector<Column> columns;
             stringstream ss(columnDefinitions);
@@ -139,20 +161,23 @@ void DatabaseManager::start() {
 
             bool valid = true;
 
-            while (getline(ss, definition, ',')) {
+            while (getline(ss, definition, ','))
+            {
 
                 stringstream columnStream(definition);
 
                 Column column;
 
-                if (!(columnStream >> column.name >> column.type)) {
+                if (!(columnStream >> column.name >> column.type))
+                {
                     valid = false;
                     break;
                 }
 
                 string extra;
 
-                if (columnStream >> extra) {
+                if (columnStream >> extra)
+                {
                     valid = false;
                     break;
                 }
@@ -160,7 +185,8 @@ void DatabaseManager::start() {
                 // Check supported data types
                 if (column.type != "int" &&
                     column.type != "integer" &&
-                    column.type.find("varchar(") != 0) {
+                    column.type.find("varchar(") != 0)
+                {
 
                     valid = false;
                     break;
@@ -169,54 +195,67 @@ void DatabaseManager::start() {
                 columns.push_back(column);
             }
 
-            if (!valid || columns.empty()) {
+            if (!valid || columns.empty())
+            {
                 cout << "Error: Invalid column definition or unsupported data type."
-                    << endl;
+                     << endl;
                 continue;
             }
 
-            if (storage.createTable(activeDatabase, tableName, columns)) {
+            if (storage.createTable(activeDatabase, tableName, columns))
+            {
                 cout << "Table '" << tableName
-                    << "' created successfully." << endl;
-            } else {
+                     << "' created successfully." << endl;
+            }
+            else
+            {
                 cout << "Error: Table already exists or could not be created."
-                    << endl;
+                     << endl;
             }
         }
 
-        //SHOW TABLE
-        else if (normalized == "show tables") {
+        // SHOW TABLE
+        else if (normalized == "show tables")
+        {
 
-            if (activeDatabase.empty()) {
+            if (activeDatabase.empty())
+            {
                 cout << "Error: Select a database first using USE." << endl;
                 continue;
             }
 
             vector<string> tables = storage.getTables(activeDatabase);
 
-            if (tables.empty()) {
+            if (tables.empty())
+            {
                 cout << "No tables found." << endl;
-            } else {
+            }
+            else
+            {
                 cout << "Tables in database '" << activeDatabase << "':"
-                    << endl;
+                     << endl;
 
-                for (size_t i = 0; i < tables.size(); i++) {
+                for (size_t i = 0; i < tables.size(); i++)
+                {
                     cout << i + 1 << ". " << tables[i] << endl;
                 }
             }
         }
 
-        //DESCRIBE table
-        else if (normalized.find("describe ") == 0) {
+        // DESCRIBE table
+        else if (normalized.find("describe ") == 0)
+        {
 
-            if (activeDatabase.empty()) {
+            if (activeDatabase.empty())
+            {
                 cout << "Error: Select a database first using USE." << endl;
                 continue;
             }
 
             string tableName = normalized.substr(9);
 
-            if (tableName.empty()) {
+            if (tableName.empty())
+            {
                 cout << "Error: Please provide a table name." << endl;
                 continue;
             }
@@ -224,28 +263,32 @@ void DatabaseManager::start() {
             vector<Column> columns =
                 storage.getTableColumns(activeDatabase, tableName);
 
-            if (columns.empty()) {
+            if (columns.empty())
+            {
                 cout << "Error: Table '" << tableName
-                    << "' does not exist or could not be read." << endl;
+                     << "' does not exist or could not be read." << endl;
                 continue;
             }
 
             cout << "\nTable: " << tableName << endl;
 
             cout << left << setw(20) << "Field"
-                << setw(20) << "Type" << endl;
+                 << setw(20) << "Type" << endl;
 
             cout << string(40, '-') << endl;
 
-            for (const auto& column : columns) {
+            for (const auto &column : columns)
+            {
                 cout << left << setw(20) << column.name
-                    << setw(20) << column.type << endl;
+                     << setw(20) << column.type << endl;
             }
         }
 
-        //INSERT into table
-        else if (normalized.find("insert into ") == 0) {
-            if (activeDatabase.empty()) {
+        // INSERT into table
+        else if (normalized.find("insert into ") == 0)
+        {
+            if (activeDatabase.empty())
+            {
                 cout << "Error: Select a database first using USE." << endl;
                 continue;
             }
@@ -253,7 +296,8 @@ void DatabaseManager::start() {
             // Find the VALUES keyword.
             size_t valuesPos = normalized.find(" values ");
 
-            if (valuesPos == string::npos) {
+            if (valuesPos == string::npos)
+            {
                 cout << "Error: Invalid INSERT syntax." << endl;
                 continue;
             }
@@ -267,26 +311,28 @@ void DatabaseManager::start() {
 
             if (openBracket == string::npos ||
                 closeBracket == string::npos ||
-                closeBracket <= openBracket) {
+                closeBracket <= openBracket)
+            {
                 cout << "Error: Invalid VALUES syntax." << endl;
                 continue;
             }
 
             string valuesPart = normalized.substr(
                 openBracket + 1,
-                closeBracket - openBracket - 1
-            );
+                closeBracket - openBracket - 1);
 
             // Split values using commas.
             vector<string> values;
             stringstream ss(valuesPart);
             string value;
 
-            while (getline(ss, value, ',')) {
+            while (getline(ss, value, ','))
+            {
                 size_t first = value.find_first_not_of(" \t");
                 size_t last = value.find_last_not_of(" \t");
 
-                if (first == string::npos) {
+                if (first == string::npos)
+                {
                     values.clear();
                     break;
                 }
@@ -296,63 +342,171 @@ void DatabaseManager::start() {
                 // Remove surrounding single quotes.
                 if (value.size() >= 2 &&
                     value.front() == '\'' &&
-                    value.back() == '\'') {
+                    value.back() == '\'')
+                {
                     value = value.substr(1, value.size() - 2);
                 }
 
                 values.push_back(value);
             }
 
-            if (values.empty()) {
+            if (values.empty())
+            {
                 cout << "Error: No valid values provided." << endl;
                 continue;
             }
 
-            if (storage.insertRow(activeDatabase, tableName, values)) {
+            if (storage.insertRow(activeDatabase, tableName, values))
+            {
                 cout << "1 row inserted successfully." << endl;
             }
-            else {
+            else
+            {
                 cout << "Error: Could not insert row. Check the table and database." << endl;
             }
         }
 
-        //SELECT from table
-        else if (normalized.find("select * from ") == 0) {
-            if (activeDatabase.empty()) {
+        // SELECT from table
+
+        else if (normalized.find("select * from ") == 0)
+        {
+            if (activeDatabase.empty())
+            {
                 cout << "Error: Select a database first using USE." << endl;
                 continue;
             }
 
-            // Extract table name.
-            string tableName = normalized.substr(14);
+            // Find the WHERE keyword.
+            size_t wherePos = normalized.find(" where ");
 
-            if (tableName.empty()) {
+            // Extract table name.
+            string tableName;
+
+            if (wherePos == string::npos)
+            {
+                tableName = normalized.substr(14);
+            }
+            else
+            {
+                tableName = normalized.substr(14, wherePos - 14);
+            }
+
+            // Remove extra spaces from table name.
+            size_t first = tableName.find_first_not_of(" \t");
+            size_t last = tableName.find_last_not_of(" \t");
+
+            if (first == string::npos)
+            {
                 cout << "Error: Please provide a table name." << endl;
                 continue;
             }
 
-            // Retrieve table structure and records.
+            tableName = tableName.substr(first, last - first + 1);
+
+            // Retrieve table structure.
             vector<Column> columns =
                 storage.getTableColumns(activeDatabase, tableName);
 
-            if (columns.empty()) {
-                cout << "Error: Table '" << tableName
-                    << "' does not exist or has no columns." << endl;
+            if (columns.empty())
+            {
+                cout << "Error: Table '" << tableName << "' does not exist." << endl;
                 continue;
             }
 
+            // Retrieve all records.
             vector<vector<string>> rows =
                 storage.getRows(activeDatabase, tableName);
+
+            // Apply WHERE condition if provided.
+            if (wherePos != string::npos)
+            {
+                string condition = normalized.substr(wherePos + 7);
+
+                size_t equalPos = condition.find('=');
+
+                if (equalPos == string::npos)
+                {
+                    cout << "Error: Currently only '=' is supported in WHERE." << endl;
+                    continue;
+                }
+
+                string columnName = condition.substr(0, equalPos);
+                string expectedValue = condition.substr(equalPos + 1);
+
+                // Trim spaces.
+                auto trim = [](string &value)
+                {
+                    size_t start = value.find_first_not_of(" \t");
+                    size_t end = value.find_last_not_of(" \t");
+
+                    if (start == string::npos)
+                    {
+                        value.clear();
+                    }
+                    else
+                    {
+                        value = value.substr(start, end - start + 1);
+                    }
+                };
+
+                trim(columnName);
+                trim(expectedValue);
+
+                // Remove surrounding single quotes.
+                if (expectedValue.size() >= 2 &&
+                    expectedValue.front() == '\'' &&
+                    expectedValue.back() == '\'')
+                {
+                    expectedValue =
+                        expectedValue.substr(1, expectedValue.size() - 2);
+                }
+
+                // Find the column index.
+                size_t columnIndex = columns.size();
+
+                for (size_t i = 0; i < columns.size(); i++)
+                {
+                    if (columns[i].name == columnName)
+                    {
+                        columnIndex = i;
+                        break;
+                    }
+                }
+
+                if (columnIndex == columns.size())
+                {
+                    cout << "Error: Column '" << columnName
+                         << "' does not exist." << endl;
+                    continue;
+                }
+
+                // Keep only matching records.
+                vector<vector<string>> filteredRows;
+
+                for (const auto &row : rows)
+                {
+                    if (columnIndex < row.size() &&
+                        row[columnIndex] == expectedValue)
+                    {
+                        filteredRows.push_back(row);
+                    }
+                }
+
+                rows = filteredRows;
+            }
 
             // Calculate column widths.
             vector<size_t> widths;
 
-            for (const auto& column : columns) {
+            for (const auto &column : columns)
+            {
                 widths.push_back(column.name.length());
             }
 
-            for (const auto& row : rows) {
-                for (size_t i = 0; i < row.size() && i < widths.size(); i++) {
+            for (const auto &row : rows)
+            {
+                for (size_t i = 0; i < row.size() && i < widths.size(); i++)
+                {
                     widths[i] = max(widths[i], row[i].length());
                 }
             }
@@ -360,39 +514,46 @@ void DatabaseManager::start() {
             // Print table header.
             cout << endl;
 
-            for (size_t width : widths) {
+            for (size_t width : widths)
+            {
                 cout << "+-" << string(width, '-') << "-";
             }
             cout << "+" << endl;
 
             cout << "|";
-            for (size_t i = 0; i < columns.size(); i++) {
+
+            for (size_t i = 0; i < columns.size(); i++)
+            {
                 cout << " " << left << setw(widths[i])
-                    << columns[i].name << " |";
+                     << columns[i].name << " |";
             }
+
             cout << endl;
 
-            for (size_t width : widths) {
+            for (size_t width : widths)
+            {
                 cout << "+-" << string(width, '-') << "-";
             }
             cout << "+" << endl;
 
             // Print records.
-            for (const auto& row : rows) {
+            for (const auto &row : rows)
+            {
                 cout << "|";
 
-                for (size_t i = 0; i < columns.size(); i++) {
+                for (size_t i = 0; i < columns.size(); i++)
+                {
                     string value = (i < row.size()) ? row[i] : "";
 
                     cout << " " << left << setw(widths[i])
-                        << value << " |";
+                         << value << " |";
                 }
 
                 cout << endl;
             }
 
-            // Print bottom border.
-            for (size_t width : widths) {
+            for (size_t width : widths)
+            {
                 cout << "+-" << string(width, '-') << "-";
             }
             cout << "+" << endl;
@@ -400,7 +561,8 @@ void DatabaseManager::start() {
             cout << rows.size() << " rows returned." << endl;
         }
 
-        else {
+        else
+        {
             cout << "Error: Unknown command." << endl;
         }
     }
