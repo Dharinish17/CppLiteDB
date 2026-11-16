@@ -316,6 +316,90 @@ void DatabaseManager::start() {
             }
         }
 
+        //SELECT from table
+        else if (normalized.find("select * from ") == 0) {
+            if (activeDatabase.empty()) {
+                cout << "Error: Select a database first using USE." << endl;
+                continue;
+            }
+
+            // Extract table name.
+            string tableName = normalized.substr(14);
+
+            if (tableName.empty()) {
+                cout << "Error: Please provide a table name." << endl;
+                continue;
+            }
+
+            // Retrieve table structure and records.
+            vector<Column> columns =
+                storage.getTableColumns(activeDatabase, tableName);
+
+            if (columns.empty()) {
+                cout << "Error: Table '" << tableName
+                    << "' does not exist or has no columns." << endl;
+                continue;
+            }
+
+            vector<vector<string>> rows =
+                storage.getRows(activeDatabase, tableName);
+
+            // Calculate column widths.
+            vector<size_t> widths;
+
+            for (const auto& column : columns) {
+                widths.push_back(column.name.length());
+            }
+
+            for (const auto& row : rows) {
+                for (size_t i = 0; i < row.size() && i < widths.size(); i++) {
+                    widths[i] = max(widths[i], row[i].length());
+                }
+            }
+
+            // Print table header.
+            cout << endl;
+
+            for (size_t width : widths) {
+                cout << "+-" << string(width, '-') << "-";
+            }
+            cout << "+" << endl;
+
+            cout << "|";
+            for (size_t i = 0; i < columns.size(); i++) {
+                cout << " " << left << setw(widths[i])
+                    << columns[i].name << " |";
+            }
+            cout << endl;
+
+            for (size_t width : widths) {
+                cout << "+-" << string(width, '-') << "-";
+            }
+            cout << "+" << endl;
+
+            // Print records.
+            for (const auto& row : rows) {
+                cout << "|";
+
+                for (size_t i = 0; i < columns.size(); i++) {
+                    string value = (i < row.size()) ? row[i] : "";
+
+                    cout << " " << left << setw(widths[i])
+                        << value << " |";
+                }
+
+                cout << endl;
+            }
+
+            // Print bottom border.
+            for (size_t width : widths) {
+                cout << "+-" << string(width, '-') << "-";
+            }
+            cout << "+" << endl;
+
+            cout << rows.size() << " rows returned." << endl;
+        }
+
         else {
             cout << "Error: Unknown command." << endl;
         }

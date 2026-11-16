@@ -34,6 +34,11 @@ public:
     const std::string& tableName,
     const std::vector<std::string>& values
     );
+
+    std::vector<std::vector<std::string>> getRows(
+    const std::string& database,
+    const std::string& tableName
+    );
 };
 
 #endif

@@ -285,3 +285,47 @@ bool StorageManager::insertRow(
 }
 
 
+//SELECT from table
+vector<vector<string>> StorageManager::getRows(
+    const string& database,
+    const string& tableName
+) {
+    vector<vector<string>> rows;
+
+    string path = "data/" + database + ".db";
+    ifstream file(path);
+
+    if (!file.is_open()) {
+        return rows;
+    }
+
+    string line;
+    bool readingData = false;
+
+    while (getline(file, line)) {
+        if (line == "DATA " + tableName) {
+            readingData = true;
+            continue;
+        }
+
+        if (readingData && line == "END_DATA") {
+            break;
+        }
+
+        if (readingData) {
+            vector<string> row;
+            stringstream ss(line);
+            string value;
+
+            while (getline(ss, value, '|')) {
+                row.push_back(value);
+            }
+
+            rows.push_back(row);
+        }
+    }
+
+    file.close();
+    return rows;
+}
+
