@@ -28,6 +28,12 @@ public:
         const std::string& database,
         const std::string& tableName
     ) const;
+
+    bool insertRow(
+    const std::string& database,
+    const std::string& tableName,
+    const std::vector<std::string>& values
+    );
 };
 
 #endif

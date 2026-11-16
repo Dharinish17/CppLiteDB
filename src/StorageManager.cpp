@@ -182,3 +182,106 @@ vector<Column> StorageManager::getTableColumns(
     return columns;
 }
 
+
+bool StorageManager::insertRow(
+    const string& database,
+    const string& tableName,
+    const vector<string>& values
+) {
+    string path = "data/" + database + ".db";
+
+    ifstream input(path);
+    if (!input.is_open()) {
+        return false;
+    }
+
+    vector<string> lines;
+    string line;
+    bool tableFound = false;
+    int dataStart = -1;
+    int dataEnd = -1;
+
+    // Read the existing database file.
+    while (getline(input, line)) {
+        if (line == "TABLE " + tableName) {
+            tableFound = true;
+        }
+
+        if (line == "DATA " + tableName) {
+            dataStart = static_cast<int>(lines.size());
+        }
+
+        if (line == "END_DATA" && dataStart != -1) {
+            dataEnd = static_cast<int>(lines.size());
+        }
+
+        lines.push_back(line);
+    }
+
+    input.close();
+
+    if (!tableFound) {
+        return false;
+    }
+
+    // Prepare the row.
+    string row;
+
+    for (size_t i = 0; i < values.size(); i++) {
+        if (values[i].find('|') != string::npos ||
+            values[i].find('\n') != string::npos) {
+            return false;
+        }
+
+        if (i > 0) {
+            row += "|";
+        }
+
+        row += values[i];
+    }
+
+    // Add a new DATA section if one doesn't exist.
+    if (dataStart == -1) {
+        lines.push_back("DATA " + tableName);
+        lines.push_back(row);
+        lines.push_back("END_DATA");
+    }
+    else {
+        // Insert the row before END_DATA.
+        lines.insert(lines.begin() + dataEnd, row);
+    }
+
+    // Write the updated contents to a temporary file.
+    string tempPath = path + ".tmp";
+
+    ofstream output(tempPath);
+    if (!output.is_open()) {
+        return false;
+    }
+
+    for (const string& existingLine : lines) {
+        output << existingLine << '\n';
+    }
+
+    output.close();
+
+    if (!output) {
+        fs::remove(tempPath);
+        return false;
+    }
+
+    // Replace the original database file.
+    error_code ec;
+    fs::copy_file(
+        tempPath,
+        path,
+        fs::copy_options::overwrite_existing,
+        ec
+    );
+
+    fs::remove(tempPath);
+
+    return !ec;
+}
+
+

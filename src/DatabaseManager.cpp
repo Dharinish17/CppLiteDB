@@ -243,6 +243,79 @@ void DatabaseManager::start() {
             }
         }
 
+        //INSERT into table
+        else if (normalized.find("insert into ") == 0) {
+            if (activeDatabase.empty()) {
+                cout << "Error: Select a database first using USE." << endl;
+                continue;
+            }
+
+            // Find the VALUES keyword.
+            size_t valuesPos = normalized.find(" values ");
+
+            if (valuesPos == string::npos) {
+                cout << "Error: Invalid INSERT syntax." << endl;
+                continue;
+            }
+
+            // Extract table name.
+            string tableName = normalized.substr(12, valuesPos - 12);
+
+            // Extract values inside parentheses.
+            size_t openBracket = normalized.find('(', valuesPos);
+            size_t closeBracket = normalized.rfind(')');
+
+            if (openBracket == string::npos ||
+                closeBracket == string::npos ||
+                closeBracket <= openBracket) {
+                cout << "Error: Invalid VALUES syntax." << endl;
+                continue;
+            }
+
+            string valuesPart = normalized.substr(
+                openBracket + 1,
+                closeBracket - openBracket - 1
+            );
+
+            // Split values using commas.
+            vector<string> values;
+            stringstream ss(valuesPart);
+            string value;
+
+            while (getline(ss, value, ',')) {
+                size_t first = value.find_first_not_of(" \t");
+                size_t last = value.find_last_not_of(" \t");
+
+                if (first == string::npos) {
+                    values.clear();
+                    break;
+                }
+
+                value = value.substr(first, last - first + 1);
+
+                // Remove surrounding single quotes.
+                if (value.size() >= 2 &&
+                    value.front() == '\'' &&
+                    value.back() == '\'') {
+                    value = value.substr(1, value.size() - 2);
+                }
+
+                values.push_back(value);
+            }
+
+            if (values.empty()) {
+                cout << "Error: No valid values provided." << endl;
+                continue;
+            }
+
+            if (storage.insertRow(activeDatabase, tableName, values)) {
+                cout << "1 row inserted successfully." << endl;
+            }
+            else {
+                cout << "Error: Could not insert row. Check the table and database." << endl;
+            }
+        }
+
         else {
             cout << "Error: Unknown command." << endl;
         }
