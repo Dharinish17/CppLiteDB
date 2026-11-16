@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <vector>
+#include <sstream>
 #include "DatabaseManager.h"
 
 using namespace std;
@@ -87,7 +88,102 @@ void DatabaseManager::start() {
                      << "' does not exist." << endl;
             }
         }
-        
+
+        //CREATE table
+        else if (normalized.find("create table ") == 0) {
+
+            // A database must be selected first
+            if (activeDatabase.empty()) {
+                cout << "Error: Select a database first using USE." << endl;
+                continue;
+            }
+
+            // Extract the table definition
+            size_t openBracket = normalized.find('(');
+            size_t closeBracket = normalized.rfind(')');
+
+            if (openBracket == string::npos ||
+                closeBracket == string::npos ||
+                closeBracket < openBracket) {
+
+                cout << "Error: Invalid CREATE TABLE syntax." << endl;
+                continue;
+            }
+
+            // Extract table name
+            string tableName = normalized.substr(
+                13, openBracket - 13
+            );
+
+            // Remove extra spaces from table name
+            size_t first = tableName.find_first_not_of(" \t");
+            size_t last = tableName.find_last_not_of(" \t");
+
+            if (first == string::npos || last == string::npos) {
+                cout << "Error: Invalid table name." << endl;
+                continue;
+            }
+
+            tableName = tableName.substr(first, last - first + 1);
+
+            // Extract column definitions
+            string columnDefinitions = normalized.substr(
+                openBracket + 1,
+                closeBracket - openBracket - 1
+            );
+
+            vector<Column> columns;
+            stringstream ss(columnDefinitions);
+            string definition;
+
+            bool valid = true;
+
+            while (getline(ss, definition, ',')) {
+
+                stringstream columnStream(definition);
+
+                Column column;
+
+                if (!(columnStream >> column.name >> column.type)) {
+                    valid = false;
+                    break;
+                }
+
+                string extra;
+
+                if (columnStream >> extra) {
+                    valid = false;
+                    break;
+                }
+
+                // Check supported data types
+                if (column.type != "int" &&
+                    column.type != "integer" &&
+                    column.type.find("varchar(") != 0) {
+
+                    valid = false;
+                    break;
+                }
+
+                columns.push_back(column);
+            }
+
+            if (!valid || columns.empty()) {
+                cout << "Error: Invalid column definition or unsupported data type."
+                    << endl;
+                continue;
+            }
+
+            if (storage.createTable(activeDatabase, tableName, columns)) {
+                cout << "Table '" << tableName
+                    << "' created successfully." << endl;
+            } else {
+                cout << "Error: Table already exists or could not be created."
+                    << endl;
+            }
+        }
+
+
         else {
             cout << "Error: Unknown command." << endl;
         }

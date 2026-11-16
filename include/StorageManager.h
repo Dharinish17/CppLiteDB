@@ -4,11 +4,23 @@
 #include <string>
 #include <vector>
 
+struct Column {
+    std::string name;
+    std::string type;
+};
+
 class StorageManager {
 public:
     bool createDatabase(const std::string& name);
     bool databaseExists(const std::string& name);
+
     std::vector<std::string> getDatabases() const;
+
+    bool createTable(
+        const std::string& database,
+        const std::string& tableName,
+        const std::vector<Column>& columns
+    );
 };
 
 #endif

@@ -1,6 +1,8 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <vector>
+#include <string>
 #include "StorageManager.h"
 
 using namespace std;
@@ -55,4 +57,46 @@ vector<string> StorageManager::getDatabases() const {
     }
 
     return databases;
+}
+
+bool StorageManager::createTable(const string& database, const string& tableName, const vector<Column>& columns) {
+    string path = "data/" + database + ".db";
+
+    if (!fs::exists(path)) {
+        return false;
+    }
+
+    // Check whether the table already exists
+    ifstream input(path);
+    string line;
+
+    while (getline(input, line)) {
+        if (line == "TABLE " + tableName) {
+            input.close();
+            return false;
+        }
+    }
+
+    input.close();
+
+    // Append the table schema to the database file
+    ofstream output(path, ios::app);
+
+    if (!output.is_open()) {
+        return false;
+    }
+
+    output << "TABLE " << tableName << "\n";
+
+    for (const auto& column : columns) {
+        output << "COLUMN "
+               << column.name << " "
+               << column.type << "\n";
+    }
+
+    output << "END_TABLE\n";
+
+    output.close();
+
+    return true;
 }
