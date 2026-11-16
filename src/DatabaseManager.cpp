@@ -15,20 +15,48 @@ void DatabaseManager::start() {
     string command;
 
     while (true) {
-        cout << "CppLiteDB> ";
+        // Display prompt
+        if (activeDatabase.empty()) {
+            cout << "CppLiteDB> ";
+        } else {
+            cout << "CppLiteDB [" << activeDatabase << "]> ";
+        }
+
         getline(cin, command);
 
         string normalized = command;
 
         transform(normalized.begin(), normalized.end(), normalized.begin(),
-                  [](unsigned char c) { return tolower(c); });
+                  [](unsigned char c) {
+                      return tolower(c);
+                  });
 
-        if (normalized == "exit" || normalized == "exit;") {
+        if (!normalized.empty() && normalized.back() == ';') {
+            normalized.pop_back();
+        }
+
+        if (normalized == "exit") {
             cout << "Closing CppLiteDB..." << endl;
             break;
         }
 
-        if (normalized == "show databases" || normalized == "show databases;") {
+        //CREATE
+        else if (normalized.find("create database ") == 0) {
+
+            string name = normalized.substr(16);
+
+            if (storage.createDatabase(name)) {
+                cout << "Database '" << name
+                     << "' created successfully." << endl;
+            } else {
+                cout << "Error: Database already exists or could not be created."
+                     << endl;
+            }
+        }
+
+        //SHOW
+        else if (normalized == "show databases") {
+
             vector<string> databases = storage.getDatabases();
 
             if (databases.empty()) {
@@ -41,21 +69,26 @@ void DatabaseManager::start() {
                 }
             }
         }
-        else if (normalized.find("create database ") == 0) {
 
-            string name = normalized.substr(16);
+        //USE
+        else if (normalized.find("use ") == 0) {
 
-            if (!name.empty() && name.back() == ';') {
-                name.pop_back();
-            }
+            string name = normalized.substr(4);
 
-            if (storage.createDatabase(name)) {
-                cout << "Database '" << name << "' created successfully." << endl;
+            if (storage.databaseExists(name)) {
+
+                activeDatabase = name;
+
+                cout << "Database changed to '"
+                     << activeDatabase << "'." << endl;
+
             } else {
-                cout << "Error: Database already exists or could not be created." << endl;
+                cout << "Error: Database '" << name
+                     << "' does not exist." << endl;
             }
-
-        } else {
+        }
+        
+        else {
             cout << "Error: Unknown command." << endl;
         }
     }
