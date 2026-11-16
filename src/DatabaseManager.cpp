@@ -5,6 +5,7 @@
 #include <vector>
 #include <sstream>
 #include <iomanip>
+#include <stdexcept>
 #include "DatabaseManager.h"
 
 using namespace std;
@@ -422,16 +423,44 @@ void DatabaseManager::start()
             {
                 string condition = normalized.substr(wherePos + 7);
 
-                size_t equalPos = condition.find('=');
+                // Identify the comparison operator.
+                string op;
+                size_t operatorPos = string::npos;
 
-                if (equalPos == string::npos)
+                if ((operatorPos = condition.find(">=")) != string::npos)
                 {
-                    cout << "Error: Currently only '=' is supported in WHERE." << endl;
+                    op = ">=";
+                }
+                else if ((operatorPos = condition.find("<=")) != string::npos)
+                {
+                    op = "<=";
+                }
+                else if ((operatorPos = condition.find("!=")) != string::npos)
+                {
+                    op = "!=";
+                }
+                else if ((operatorPos = condition.find(">")) != string::npos)
+                {
+                    op = ">";
+                }
+                else if ((operatorPos = condition.find("<")) != string::npos)
+                {
+                    op = "<";
+                }
+                else if ((operatorPos = condition.find("=")) != string::npos)
+                {
+                    op = "=";
+                }
+                else
+                {
+                    cout << "Error: Unsupported comparison operator." << endl;
                     continue;
                 }
 
-                string columnName = condition.substr(0, equalPos);
-                string expectedValue = condition.substr(equalPos + 1);
+                // Extract column name and expected value.
+                string columnName = condition.substr(0, operatorPos);
+                string expectedValue = condition.substr(
+                    operatorPos + op.length());
 
                 // Trim spaces.
                 auto trim = [](string &value)
@@ -457,8 +486,8 @@ void DatabaseManager::start()
                     expectedValue.front() == '\'' &&
                     expectedValue.back() == '\'')
                 {
-                    expectedValue =
-                        expectedValue.substr(1, expectedValue.size() - 2);
+                    expectedValue = expectedValue.substr(
+                        1, expectedValue.size() - 2);
                 }
 
                 // Find the column index.
@@ -480,13 +509,97 @@ void DatabaseManager::start()
                     continue;
                 }
 
-                // Keep only matching records.
+                // Check whether the column is numeric.
+                string columnType = columns[columnIndex].type;
+
+                bool isNumeric =
+                    columnType == "int" || columnType == "integer";
+
+                long long expectedNumber = 0;
+
+                // Convert expected value to a number if necessary.
+                if (isNumeric)
+                {
+                    try
+                    {
+                        size_t parsed = 0;
+                        expectedNumber = stoll(expectedValue, &parsed);
+
+                        if (parsed != expectedValue.length())
+                        {
+                            throw invalid_argument("Invalid number");
+                        }
+                    }
+                    catch (...)
+                    {
+                        cout << "Error: Invalid numeric comparison value." << endl;
+                        continue;
+                    }
+                }
+
+                // Filter matching records.
                 vector<vector<string>> filteredRows;
 
                 for (const auto &row : rows)
                 {
-                    if (columnIndex < row.size() &&
-                        row[columnIndex] == expectedValue)
+                    if (columnIndex >= row.size())
+                    {
+                        continue;
+                    }
+
+                    bool matches = false;
+
+                    if (isNumeric)
+                    {
+                        try
+                        {
+                            size_t parsed = 0;
+
+                            long long actualNumber =
+                                stoll(row[columnIndex], &parsed);
+
+                            if (parsed != row[columnIndex].length())
+                            {
+                                continue;
+                            }
+
+                            if (op == "=")
+                                matches = actualNumber == expectedNumber;
+                            else if (op == "!=")
+                                matches = actualNumber != expectedNumber;
+                            else if (op == ">")
+                                matches = actualNumber > expectedNumber;
+                            else if (op == "<")
+                                matches = actualNumber < expectedNumber;
+                            else if (op == ">=")
+                                matches = actualNumber >= expectedNumber;
+                            else if (op == "<=")
+                                matches = actualNumber <= expectedNumber;
+                        }
+                        catch (...)
+                        {
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        string actualValue = row[columnIndex];
+
+                        if (op == "=")
+                            matches = actualValue == expectedValue;
+                        else if (op == "!=")
+                            matches = actualValue != expectedValue;
+                        else if (op == ">")
+                            matches = actualValue > expectedValue;
+                        else if (op == "<")
+                            matches = actualValue < expectedValue;
+                        else if (op == ">=")
+                            matches = actualValue >= expectedValue;
+                        else if (op == "<=")
+                            matches = actualValue <= expectedValue;
+                    }
+
+                    if (matches)
                     {
                         filteredRows.push_back(row);
                     }
