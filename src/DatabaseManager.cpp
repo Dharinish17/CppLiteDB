@@ -4,6 +4,7 @@
 #include <cctype>
 #include <vector>
 #include <sstream>
+#include <iomanip>
 #include "DatabaseManager.h"
 
 using namespace std;
@@ -183,6 +184,64 @@ void DatabaseManager::start() {
             }
         }
 
+        //SHOW TABLE
+        else if (normalized == "show tables") {
+
+            if (activeDatabase.empty()) {
+                cout << "Error: Select a database first using USE." << endl;
+                continue;
+            }
+
+            vector<string> tables = storage.getTables(activeDatabase);
+
+            if (tables.empty()) {
+                cout << "No tables found." << endl;
+            } else {
+                cout << "Tables in database '" << activeDatabase << "':"
+                    << endl;
+
+                for (size_t i = 0; i < tables.size(); i++) {
+                    cout << i + 1 << ". " << tables[i] << endl;
+                }
+            }
+        }
+
+        //DESCRIBE table
+        else if (normalized.find("describe ") == 0) {
+
+            if (activeDatabase.empty()) {
+                cout << "Error: Select a database first using USE." << endl;
+                continue;
+            }
+
+            string tableName = normalized.substr(9);
+
+            if (tableName.empty()) {
+                cout << "Error: Please provide a table name." << endl;
+                continue;
+            }
+
+            vector<Column> columns =
+                storage.getTableColumns(activeDatabase, tableName);
+
+            if (columns.empty()) {
+                cout << "Error: Table '" << tableName
+                    << "' does not exist or could not be read." << endl;
+                continue;
+            }
+
+            cout << "\nTable: " << tableName << endl;
+
+            cout << left << setw(20) << "Field"
+                << setw(20) << "Type" << endl;
+
+            cout << string(40, '-') << endl;
+
+            for (const auto& column : columns) {
+                cout << left << setw(20) << column.name
+                    << setw(20) << column.type << endl;
+            }
+        }
 
         else {
             cout << "Error: Unknown command." << endl;

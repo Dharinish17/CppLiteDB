@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <vector>
 #include <string>
+#include <sstream>
 #include "StorageManager.h"
 
 using namespace std;
@@ -100,3 +101,84 @@ bool StorageManager::createTable(const string& database, const string& tableName
 
     return true;
 }
+
+//SHOW table
+vector<string> StorageManager::getTables(const string& database) const {
+
+    vector<string> tables;
+
+    string path = "data/" + database + ".db";
+
+    ifstream file(path);
+
+    if (!file.is_open()) {
+        return tables;
+    }
+
+    string line;
+
+    while (getline(file, line)) {
+
+        if (line.find("TABLE ") == 0) {
+
+            string tableName = line.substr(6);
+
+            tables.push_back(tableName);
+        }
+    }
+
+    file.close();
+
+    return tables;
+}
+
+//DESCRIBE table
+vector<Column> StorageManager::getTableColumns(
+    const string& database,
+    const string& tableName
+) const {
+
+    vector<Column> columns;
+
+    string path = "data/" + database + ".db";
+
+    ifstream file(path);
+
+    if (!file.is_open()) {
+        return columns;
+    }
+
+    string line;
+    bool tableFound = false;
+
+    while (getline(file, line)) {
+
+        // Check whether this is the requested table
+        if (line == "TABLE " + tableName) {
+            tableFound = true;
+            continue;
+        }
+
+        // Stop reading when the table definition ends
+        if (tableFound && line == "END_TABLE") {
+            break;
+        }
+
+        // Extract column information
+        if (tableFound && line.find("COLUMN ") == 0) {
+
+            stringstream ss(line.substr(7));
+
+            Column column;
+
+            if (ss >> column.name >> column.type) {
+                columns.push_back(column);
+            }
+        }
+    }
+
+    file.close();
+
+    return columns;
+}
+

@@ -21,6 +21,13 @@ public:
         const std::string& tableName,
         const std::vector<Column>& columns
     );
+
+    std::vector<std::string> getTables(const std::string& database) const;
+
+    std::vector<Column> getTableColumns(
+        const std::string& database,
+        const std::string& tableName
+    ) const;
 };
 
 #endif
