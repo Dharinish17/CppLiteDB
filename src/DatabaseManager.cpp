@@ -2,6 +2,7 @@
 #include <string>
 #include <algorithm>
 #include <cctype>
+#include <vector>
 #include "DatabaseManager.h"
 
 using namespace std;
@@ -27,7 +28,20 @@ void DatabaseManager::start() {
             break;
         }
 
-        if (normalized.find("create database ") == 0) {
+        if (normalized == "show databases" || normalized == "show databases;") {
+            vector<string> databases = storage.getDatabases();
+
+            if (databases.empty()) {
+                cout << "No databases found." << endl;
+            } else {
+                cout << "Databases:" << endl;
+
+                for (size_t i = 0; i < databases.size(); i++) {
+                    cout << i + 1 << ". " << databases[i] << endl;
+                }
+            }
+        }
+        else if (normalized.find("create database ") == 0) {
 
             string name = normalized.substr(16);
 

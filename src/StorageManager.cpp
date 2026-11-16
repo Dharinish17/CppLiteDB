@@ -36,3 +36,23 @@ bool StorageManager::databaseExists(const string& name) {
 
     return fs::exists(path);
 }
+
+vector<string> StorageManager::getDatabases() const {
+
+    vector<string> databases;
+
+    if (!fs::exists("data")) {
+        return databases;
+    }
+
+    for (const auto& entry : fs::directory_iterator("data")) {
+
+        if (entry.is_regular_file() &&
+            entry.path().extension() == ".db") {
+
+            databases.push_back(entry.path().stem().string());
+        }
+    }
+
+    return databases;
+}
