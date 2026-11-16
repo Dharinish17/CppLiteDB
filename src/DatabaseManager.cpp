@@ -423,46 +423,7 @@ void DatabaseManager::start()
             {
                 string condition = normalized.substr(wherePos + 7);
 
-                // Identify the comparison operator.
-                string op;
-                size_t operatorPos = string::npos;
-
-                if ((operatorPos = condition.find(">=")) != string::npos)
-                {
-                    op = ">=";
-                }
-                else if ((operatorPos = condition.find("<=")) != string::npos)
-                {
-                    op = "<=";
-                }
-                else if ((operatorPos = condition.find("!=")) != string::npos)
-                {
-                    op = "!=";
-                }
-                else if ((operatorPos = condition.find(">")) != string::npos)
-                {
-                    op = ">";
-                }
-                else if ((operatorPos = condition.find("<")) != string::npos)
-                {
-                    op = "<";
-                }
-                else if ((operatorPos = condition.find("=")) != string::npos)
-                {
-                    op = "=";
-                }
-                else
-                {
-                    cout << "Error: Unsupported comparison operator." << endl;
-                    continue;
-                }
-
-                // Extract column name and expected value.
-                string columnName = condition.substr(0, operatorPos);
-                string expectedValue = condition.substr(
-                    operatorPos + op.length());
-
-                // Trim spaces.
+                // Remove extra spaces.
                 auto trim = [](string &value)
                 {
                     size_t start = value.find_first_not_of(" \t");
@@ -478,63 +439,182 @@ void DatabaseManager::start()
                     }
                 };
 
-                trim(columnName);
-                trim(expectedValue);
-
-                // Remove surrounding single quotes.
-                if (expectedValue.size() >= 2 &&
-                    expectedValue.front() == '\'' &&
-                    expectedValue.back() == '\'')
+                // Split conditions using AND or OR.
+                auto splitConditions = [](const string &text, const string &delimiter)
                 {
-                    expectedValue = expectedValue.substr(
-                        1, expectedValue.size() - 2);
-                }
+                    vector<string> parts;
+                    size_t start = 0;
+                    size_t pos;
 
-                // Find the column index.
-                size_t columnIndex = columns.size();
-
-                for (size_t i = 0; i < columns.size(); i++)
-                {
-                    if (columns[i].name == columnName)
+                    while ((pos = text.find(delimiter, start)) != string::npos)
                     {
-                        columnIndex = i;
+                        parts.push_back(text.substr(start, pos - start));
+                        start = pos + delimiter.length();
+                    }
+
+                    parts.push_back(text.substr(start));
+
+                    return parts;
+                };
+
+                // Store parsed condition information.
+                struct ParsedCondition
+                {
+                    size_t columnIndex;
+                    string op;
+                    string expectedValue;
+                    bool isNumeric;
+                    long long expectedNumber;
+                };
+
+                // Each inner vector represents conditions joined by AND.
+                // Different inner vectors are joined by OR.
+                vector<vector<ParsedCondition>> conditionGroups;
+
+                string errorMessage;
+
+                // Split the complete condition using OR.
+                vector<string> orGroups = splitConditions(condition, " or ");
+
+                for (const string &orGroup : orGroups)
+                {
+                    vector<ParsedCondition> andConditions;
+
+                    // Split each OR group using AND.
+                    vector<string> parts = splitConditions(orGroup, " and ");
+
+                    for (string part : parts)
+                    {
+                        trim(part);
+
+                        // Identify the comparison operator.
+                        string op;
+                        size_t operatorPos = string::npos;
+
+                        if ((operatorPos = part.find(">=")) != string::npos)
+                        {
+                            op = ">=";
+                        }
+                        else if ((operatorPos = part.find("<=")) != string::npos)
+                        {
+                            op = "<=";
+                        }
+                        else if ((operatorPos = part.find("!=")) != string::npos)
+                        {
+                            op = "!=";
+                        }
+                        else if ((operatorPos = part.find(">")) != string::npos)
+                        {
+                            op = ">";
+                        }
+                        else if ((operatorPos = part.find("<")) != string::npos)
+                        {
+                            op = "<";
+                        }
+                        else if ((operatorPos = part.find("=")) != string::npos)
+                        {
+                            op = "=";
+                        }
+                        else
+                        {
+                            errorMessage = "Unsupported comparison operator.";
+                            break;
+                        }
+
+                        // Extract column name and expected value.
+                        string columnName = part.substr(0, operatorPos);
+                        string expectedValue = part.substr(
+                            operatorPos + op.length());
+
+                        trim(columnName);
+                        trim(expectedValue);
+
+                        if (columnName.empty() || expectedValue.empty())
+                        {
+                            errorMessage = "Invalid WHERE condition.";
+                            break;
+                        }
+
+                        // Remove surrounding single quotes.
+                        if (expectedValue.size() >= 2 &&
+                            expectedValue.front() == '\'' &&
+                            expectedValue.back() == '\'')
+                        {
+                            expectedValue = expectedValue.substr(
+                                1, expectedValue.size() - 2);
+                        }
+
+                        // Find the column index.
+                        size_t columnIndex = columns.size();
+
+                        for (size_t i = 0; i < columns.size(); i++)
+                        {
+                            if (columns[i].name == columnName)
+                            {
+                                columnIndex = i;
+                                break;
+                            }
+                        }
+
+                        if (columnIndex == columns.size())
+                        {
+                            errorMessage = "Column '" + columnName +
+                                           "' does not exist.";
+                            break;
+                        }
+
+                        // Check whether the column is numeric.
+                        string columnType = columns[columnIndex].type;
+
+                        bool isNumeric =
+                            columnType == "int" || columnType == "integer";
+
+                        long long expectedNumber = 0;
+
+                        // Convert expected value to a number if necessary.
+                        if (isNumeric)
+                        {
+                            try
+                            {
+                                size_t parsed = 0;
+
+                                expectedNumber = stoll(
+                                    expectedValue, &parsed);
+
+                                if (parsed != expectedValue.length())
+                                {
+                                    throw invalid_argument("Invalid number");
+                                }
+                            }
+                            catch (...)
+                            {
+                                errorMessage =
+                                    "Invalid numeric comparison value.";
+                                break;
+                            }
+                        }
+
+                        // Store the parsed condition.
+                        andConditions.push_back({columnIndex,
+                                                 op,
+                                                 expectedValue,
+                                                 isNumeric,
+                                                 expectedNumber});
+                    }
+
+                    if (!errorMessage.empty())
+                    {
                         break;
                     }
+
+                    conditionGroups.push_back(andConditions);
                 }
 
-                if (columnIndex == columns.size())
+                // Stop if any condition is invalid.
+                if (!errorMessage.empty())
                 {
-                    cout << "Error: Column '" << columnName
-                         << "' does not exist." << endl;
+                    cout << "Error: " << errorMessage << endl;
                     continue;
-                }
-
-                // Check whether the column is numeric.
-                string columnType = columns[columnIndex].type;
-
-                bool isNumeric =
-                    columnType == "int" || columnType == "integer";
-
-                long long expectedNumber = 0;
-
-                // Convert expected value to a number if necessary.
-                if (isNumeric)
-                {
-                    try
-                    {
-                        size_t parsed = 0;
-                        expectedNumber = stoll(expectedValue, &parsed);
-
-                        if (parsed != expectedValue.length())
-                        {
-                            throw invalid_argument("Invalid number");
-                        }
-                    }
-                    catch (...)
-                    {
-                        cout << "Error: Invalid numeric comparison value." << endl;
-                        continue;
-                    }
                 }
 
                 // Filter matching records.
@@ -542,64 +622,95 @@ void DatabaseManager::start()
 
                 for (const auto &row : rows)
                 {
-                    if (columnIndex >= row.size())
-                    {
-                        continue;
-                    }
+                    bool rowMatchesAnyGroup = false;
 
-                    bool matches = false;
-
-                    if (isNumeric)
+                    // Evaluate OR groups.
+                    for (const auto &group : conditionGroups)
                     {
-                        try
+                        bool groupMatches = true;
+
+                        // All conditions inside a group must match.
+                        for (const auto &current : group)
                         {
-                            size_t parsed = 0;
-
-                            long long actualNumber =
-                                stoll(row[columnIndex], &parsed);
-
-                            if (parsed != row[columnIndex].length())
+                            if (current.columnIndex >= row.size())
                             {
-                                continue;
+                                groupMatches = false;
+                                break;
                             }
 
-                            if (op == "=")
-                                matches = actualNumber == expectedNumber;
-                            else if (op == "!=")
-                                matches = actualNumber != expectedNumber;
-                            else if (op == ">")
-                                matches = actualNumber > expectedNumber;
-                            else if (op == "<")
-                                matches = actualNumber < expectedNumber;
-                            else if (op == ">=")
-                                matches = actualNumber >= expectedNumber;
-                            else if (op == "<=")
-                                matches = actualNumber <= expectedNumber;
+                            bool matches = false;
+
+                            if (current.isNumeric)
+                            {
+                                try
+                                {
+                                    size_t parsed = 0;
+
+                                    long long actualNumber = stoll(
+                                        row[current.columnIndex], &parsed);
+
+                                    if (parsed != row[current.columnIndex].length())
+                                    {
+                                        groupMatches = false;
+                                        break;
+                                    }
+
+                                    long long expectedNumber =
+                                        current.expectedNumber;
+
+                                    if (current.op == "=")
+                                        matches = actualNumber == expectedNumber;
+                                    else if (current.op == "!=")
+                                        matches = actualNumber != expectedNumber;
+                                    else if (current.op == ">")
+                                        matches = actualNumber > expectedNumber;
+                                    else if (current.op == "<")
+                                        matches = actualNumber < expectedNumber;
+                                    else if (current.op == ">=")
+                                        matches = actualNumber >= expectedNumber;
+                                    else if (current.op == "<=")
+                                        matches = actualNumber <= expectedNumber;
+                                }
+                                catch (...)
+                                {
+                                    groupMatches = false;
+                                    break;
+                                }
+                            }
+                            else
+                            {
+                                string actualValue = row[current.columnIndex];
+                                string expectedValue = current.expectedValue;
+
+                                if (current.op == "=")
+                                    matches = actualValue == expectedValue;
+                                else if (current.op == "!=")
+                                    matches = actualValue != expectedValue;
+                                else if (current.op == ">")
+                                    matches = actualValue > expectedValue;
+                                else if (current.op == "<")
+                                    matches = actualValue < expectedValue;
+                                else if (current.op == ">=")
+                                    matches = actualValue >= expectedValue;
+                                else if (current.op == "<=")
+                                    matches = actualValue <= expectedValue;
+                            }
+
+                            if (!matches)
+                            {
+                                groupMatches = false;
+                                break;
+                            }
                         }
-                        catch (...)
+
+                        if (groupMatches)
                         {
-                            continue;
+                            rowMatchesAnyGroup = true;
+                            break;
                         }
                     }
-                    else
-                    {
-                        string actualValue = row[columnIndex];
 
-                        if (op == "=")
-                            matches = actualValue == expectedValue;
-                        else if (op == "!=")
-                            matches = actualValue != expectedValue;
-                        else if (op == ">")
-                            matches = actualValue > expectedValue;
-                        else if (op == "<")
-                            matches = actualValue < expectedValue;
-                        else if (op == ">=")
-                            matches = actualValue >= expectedValue;
-                        else if (op == "<=")
-                            matches = actualValue <= expectedValue;
-                    }
-
-                    if (matches)
+                    if (rowMatchesAnyGroup)
                     {
                         filteredRows.push_back(row);
                     }
