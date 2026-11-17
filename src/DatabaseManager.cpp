@@ -367,8 +367,324 @@ void DatabaseManager::start()
             }
         }
 
-        // SELECT from table
+        //UPDATE a row in a table
+        else if (normalized.rfind("update ", 0) == 0)
+        {
+            if (activeDatabase.empty())
+            {
+                cout << "Error: Select a database first." << endl;
+                continue;
+            }
 
+            // Find SET and WHERE keywords.
+            size_t setPos = normalized.find(" set ");
+            size_t wherePos = normalized.find(" where ");
+
+            if (setPos == string::npos || wherePos == string::npos ||
+                wherePos <= setPos)
+            {
+                cout << "Error: Invalid UPDATE syntax." << endl;
+                continue;
+            }
+
+            // Extract table name.
+            string tableName = normalized.substr(7, setPos - 7);
+
+            // Extract SET assignment.
+            string assignment = normalized.substr(
+                setPos + 5,
+                wherePos - (setPos + 5)
+            );
+
+            // Extract WHERE condition.
+            string condition = normalized.substr(wherePos + 7);
+
+            // Remove extra spaces.
+            auto trim = [](string &value)
+            {
+                size_t start = value.find_first_not_of(" \t");
+                size_t end = value.find_last_not_of(" \t");
+
+                if (start == string::npos)
+                {
+                    value.clear();
+                }
+                else
+                {
+                    value = value.substr(start, end - start + 1);
+                }
+            };
+
+            trim(tableName);
+            trim(assignment);
+            trim(condition);
+
+            // Parse the SET assignment.
+            size_t equalPos = assignment.find('=');
+
+            if (equalPos == string::npos)
+            {
+                cout << "Error: Invalid SET assignment." << endl;
+                continue;
+            }
+
+            string updateColumn = assignment.substr(0, equalPos);
+            string updateValue = assignment.substr(equalPos + 1);
+
+            trim(updateColumn);
+            trim(updateValue);
+
+            // Remove surrounding single quotes.
+            if (updateValue.size() >= 2 &&
+                updateValue.front() == '\'' &&
+                updateValue.back() == '\'')
+            {
+                updateValue = updateValue.substr(
+                    1, updateValue.size() - 2
+                );
+            }
+
+            if (updateColumn.empty() || updateValue.empty())
+            {
+                cout << "Error: Invalid SET assignment." << endl;
+                continue;
+            }
+
+            // Get table columns and records.
+            vector<Column> columns = storage.getTableColumns(
+                activeDatabase, tableName
+            );
+
+            if (columns.empty())
+            {
+                cout << "Error: Table does not exist." << endl;
+                continue;
+            }
+
+            vector<vector<string>> rows = storage.getRows(
+                activeDatabase, tableName
+            );
+
+            // Find the column to update.
+            size_t updateIndex = columns.size();
+
+            for (size_t i = 0; i < columns.size(); i++)
+            {
+                if (columns[i].name == updateColumn)
+                {
+                    updateIndex = i;
+                    break;
+                }
+            }
+
+            if (updateIndex == columns.size())
+            {
+                cout << "Error: Column '" << updateColumn
+                     << "' does not exist." << endl;
+                continue;
+            }
+
+            // Validate the new value for integer columns.
+            string updateType = columns[updateIndex].type;
+
+            if (updateType == "int" || updateType == "integer")
+            {
+                try
+                {
+                    size_t parsed = 0;
+                    stoll(updateValue, &parsed);
+
+                    if (parsed != updateValue.length())
+                    {
+                        throw invalid_argument("Invalid number");
+                    }
+                }
+                catch (...)
+                {
+                    cout << "Error: Invalid integer value." << endl;
+                    continue;
+                }
+            }
+
+            // Identify the WHERE comparison operator.
+            string op;
+            size_t operatorPos = string::npos;
+
+            if ((operatorPos = condition.find(">=")) != string::npos)
+                op = ">=";
+            else if ((operatorPos = condition.find("<=")) != string::npos)
+                op = "<=";
+            else if ((operatorPos = condition.find("!=")) != string::npos)
+                op = "!=";
+            else if ((operatorPos = condition.find(">")) != string::npos)
+                op = ">";
+            else if ((operatorPos = condition.find("<")) != string::npos)
+                op = "<";
+            else if ((operatorPos = condition.find("=")) != string::npos)
+                op = "=";
+            else
+            {
+                cout << "Error: Unsupported WHERE operator." << endl;
+                continue;
+            }
+
+            // Extract WHERE column and expected value.
+            string whereColumn = condition.substr(0, operatorPos);
+            string expectedValue = condition.substr(
+                operatorPos + op.length()
+            );
+
+            trim(whereColumn);
+            trim(expectedValue);
+
+            if (whereColumn.empty() || expectedValue.empty())
+            {
+                cout << "Error: Invalid WHERE condition." << endl;
+                continue;
+            }
+
+            // Remove surrounding single quotes.
+            if (expectedValue.size() >= 2 &&
+                expectedValue.front() == '\'' &&
+                expectedValue.back() == '\'')
+            {
+                expectedValue = expectedValue.substr(
+                    1, expectedValue.size() - 2
+                );
+            }
+
+            // Find the WHERE column index.
+            size_t whereIndex = columns.size();
+
+            for (size_t i = 0; i < columns.size(); i++)
+            {
+                if (columns[i].name == whereColumn)
+                {
+                    whereIndex = i;
+                    break;
+                }
+            }
+
+            if (whereIndex == columns.size())
+            {
+                cout << "Error: Column '" << whereColumn
+                     << "' does not exist." << endl;
+                continue;
+            }
+
+            // Check whether the WHERE column is numeric.
+            string whereType = columns[whereIndex].type;
+
+            bool isNumeric =
+                whereType == "int" || whereType == "integer";
+
+            long long expectedNumber = 0;
+
+            if (isNumeric)
+            {
+                try
+                {
+                    size_t parsed = 0;
+
+                    expectedNumber = stoll(expectedValue, &parsed);
+
+                    if (parsed != expectedValue.length())
+                    {
+                        throw invalid_argument("Invalid number");
+                    }
+                }
+                catch (...)
+                {
+                    cout << "Error: Invalid numeric comparison value."
+                         << endl;
+                    continue;
+                }
+            }
+
+            // Update matching records.
+            int updatedCount = 0;
+
+            for (auto &row : rows)
+            {
+                if (updateIndex >= row.size() ||
+                    whereIndex >= row.size())
+                {
+                    continue;
+                }
+
+                bool matches = false;
+
+                if (isNumeric)
+                {
+                    try
+                    {
+                        size_t parsed = 0;
+
+                        long long actualNumber = stoll(
+                            row[whereIndex], &parsed
+                        );
+
+                        if (parsed != row[whereIndex].length())
+                        {
+                            continue;
+                        }
+
+                        if (op == "=")
+                            matches = actualNumber == expectedNumber;
+                        else if (op == "!=")
+                            matches = actualNumber != expectedNumber;
+                        else if (op == ">")
+                            matches = actualNumber > expectedNumber;
+                        else if (op == "<")
+                            matches = actualNumber < expectedNumber;
+                        else if (op == ">=")
+                            matches = actualNumber >= expectedNumber;
+                        else if (op == "<=")
+                            matches = actualNumber <= expectedNumber;
+                    }
+                    catch (...)
+                    {
+                        continue;
+                    }
+                }
+                else
+                {
+                    string actualValue = row[whereIndex];
+
+                    if (op == "=")
+                        matches = actualValue == expectedValue;
+                    else if (op == "!=")
+                        matches = actualValue != expectedValue;
+                    else if (op == ">")
+                        matches = actualValue > expectedValue;
+                    else if (op == "<")
+                        matches = actualValue < expectedValue;
+                    else if (op == ">=")
+                        matches = actualValue >= expectedValue;
+                    else if (op == "<=")
+                        matches = actualValue <= expectedValue;
+                }
+
+                if (matches)
+                {
+                    row[updateIndex] = updateValue;
+                    updatedCount++;
+                }
+            }
+
+            // Save the modified records.
+            if (storage.updateRows(activeDatabase, tableName, rows))
+            {
+                cout << updatedCount << " row(s) updated successfully."
+                     << endl;
+            }
+            else
+            {
+                cout << "Error: Could not update records." << endl;
+            }
+        }
+
+        // SELECT from table
         else if (normalized.find("select * from ") == 0)
         {
             if (activeDatabase.empty())

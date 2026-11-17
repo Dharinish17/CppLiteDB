@@ -4,41 +4,44 @@
 #include <string>
 #include <vector>
 
-struct Column {
+struct Column
+{
     std::string name;
     std::string type;
 };
 
-class StorageManager {
+class StorageManager
+{
 public:
-    bool createDatabase(const std::string& name);
-    bool databaseExists(const std::string& name);
+    bool createDatabase(const std::string &name);
+    bool databaseExists(const std::string &name);
 
     std::vector<std::string> getDatabases() const;
 
     bool createTable(
-        const std::string& database,
-        const std::string& tableName,
-        const std::vector<Column>& columns
-    );
+        const std::string &database,
+        const std::string &tableName,
+        const std::vector<Column> &columns);
 
-    std::vector<std::string> getTables(const std::string& database) const;
+    std::vector<std::string> getTables(const std::string &database) const;
 
     std::vector<Column> getTableColumns(
-        const std::string& database,
-        const std::string& tableName
-    ) const;
+        const std::string &database,
+        const std::string &tableName) const;
 
     bool insertRow(
-    const std::string& database,
-    const std::string& tableName,
-    const std::vector<std::string>& values
-    );
+        const std::string &database,
+        const std::string &tableName,
+        const std::vector<std::string> &values);
 
     std::vector<std::vector<std::string>> getRows(
-    const std::string& database,
-    const std::string& tableName
-    );
+        const std::string &database,
+        const std::string &tableName);
+
+    bool updateRows(
+        const std::string &database,
+        const std::string &tableName,
+        const std::vector<std::vector<std::string>> &rows);
 };
 
 #endif
