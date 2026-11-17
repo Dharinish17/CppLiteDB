@@ -677,7 +677,6 @@ void DatabaseManager::start()
             }
         }
 
-
         // DELETE command.
         else if (normalized.rfind("delete from ", 0) == 0)
         {
@@ -727,8 +726,7 @@ void DatabaseManager::start()
 
             // Get table columns and records.
             vector<Column> columns = storage.getTableColumns(
-                activeDatabase, tableName
-            );
+                activeDatabase, tableName);
 
             if (columns.empty())
             {
@@ -737,8 +735,7 @@ void DatabaseManager::start()
             }
 
             vector<vector<string>> rows = storage.getRows(
-                activeDatabase, tableName
-            );
+                activeDatabase, tableName);
 
             // Identify the comparison operator.
             string op;
@@ -765,8 +762,7 @@ void DatabaseManager::start()
             // Extract column name and expected value.
             string columnName = condition.substr(0, operatorPos);
             string expectedValue = condition.substr(
-                operatorPos + op.length()
-            );
+                operatorPos + op.length());
 
             trim(columnName);
             trim(expectedValue);
@@ -783,8 +779,7 @@ void DatabaseManager::start()
                 expectedValue.back() == '\'')
             {
                 expectedValue = expectedValue.substr(
-                    1, expectedValue.size() - 2
-                );
+                    1, expectedValue.size() - 2);
             }
 
             // Find the column index.
@@ -856,8 +851,7 @@ void DatabaseManager::start()
                         size_t parsed = 0;
 
                         long long actualNumber = stoll(
-                            row[columnIndex], &parsed
-                        );
+                            row[columnIndex], &parsed);
 
                         if (parsed != row[columnIndex].length())
                         {
@@ -926,84 +920,147 @@ void DatabaseManager::start()
         }
 
         // SELECT from table
-        else if (normalized.find("select * from ") == 0)
+        else if (normalized.rfind("select ", 0) == 0)
         {
             if (activeDatabase.empty())
             {
-                cout << "Error: Select a database first using USE." << endl;
+                cout << "Error: Select a database first." << endl;
                 continue;
             }
 
-            // Find the WHERE keyword.
-            size_t wherePos = normalized.find(" where ");
+            // Find FROM keyword.
+            size_t fromPos = normalized.find(" from ");
+
+            if (fromPos == string::npos)
+            {
+                cout << "Error: Invalid SELECT syntax." << endl;
+                continue;
+            }
+
+            // Extract selected columns.
+            string selectedColumnText = normalized.substr(
+                7, fromPos - 7);
+
+            // Find WHERE keyword.
+            size_t wherePos = normalized.find(" where ", fromPos);
 
             // Extract table name.
             string tableName;
 
             if (wherePos == string::npos)
             {
-                tableName = normalized.substr(14);
+                tableName = normalized.substr(fromPos + 6);
             }
             else
             {
-                tableName = normalized.substr(14, wherePos - 14);
+                tableName = normalized.substr(
+                    fromPos + 6,
+                    wherePos - (fromPos + 6));
             }
 
-            // Remove extra spaces from table name.
-            size_t first = tableName.find_first_not_of(" \t");
-            size_t last = tableName.find_last_not_of(" \t");
-
-            if (first == string::npos)
+            // Remove extra spaces.
+            auto trim = [](string &value)
             {
-                cout << "Error: Please provide a table name." << endl;
-                continue;
-            }
+                size_t start = value.find_first_not_of(" \t");
+                size_t end = value.find_last_not_of(" \t");
 
-            tableName = tableName.substr(first, last - first + 1);
+                if (start == string::npos)
+                {
+                    value.clear();
+                }
+                else
+                {
+                    value = value.substr(start, end - start + 1);
+                }
+            };
 
-            // Retrieve table structure.
-            vector<Column> columns =
-                storage.getTableColumns(activeDatabase, tableName);
+            trim(selectedColumnText);
+            trim(tableName);
+
+            // Get all table columns.
+            vector<Column> columns = storage.getTableColumns(
+                activeDatabase, tableName);
 
             if (columns.empty())
             {
-                cout << "Error: Table '" << tableName << "' does not exist." << endl;
+                cout << "Error: Table does not exist." << endl;
                 continue;
             }
 
-            // Retrieve all records.
-            vector<vector<string>> rows =
-                storage.getRows(activeDatabase, tableName);
+            // Get all table records.
+            vector<vector<string>> rows = storage.getRows(
+                activeDatabase, tableName);
+
+            // Determine which columns should be displayed.
+            vector<size_t> selectedIndexes;
+
+            if (selectedColumnText == "*")
+            {
+                for (size_t i = 0; i < columns.size(); i++)
+                {
+                    selectedIndexes.push_back(i);
+                }
+            }
+            else
+            {
+                stringstream columnStream(selectedColumnText);
+                string columnName;
+
+                while (getline(columnStream, columnName, ','))
+                {
+                    trim(columnName);
+
+                    if (columnName.empty())
+                    {
+                        cout << "Error: Invalid column list." << endl;
+                        selectedIndexes.clear();
+                        break;
+                    }
+
+                    size_t columnIndex = columns.size();
+
+                    for (size_t i = 0; i < columns.size(); i++)
+                    {
+                        if (columns[i].name == columnName)
+                        {
+                            columnIndex = i;
+                            break;
+                        }
+                    }
+
+                    if (columnIndex == columns.size())
+                    {
+                        cout << "Error: Column '" << columnName
+                             << "' does not exist." << endl;
+
+                        selectedIndexes.clear();
+                        break;
+                    }
+
+                    selectedIndexes.push_back(columnIndex);
+                }
+
+                if (selectedIndexes.empty())
+                {
+                    continue;
+                }
+            }
 
             // Apply WHERE condition if provided.
             if (wherePos != string::npos)
             {
                 string condition = normalized.substr(wherePos + 7);
 
-                // Remove extra spaces.
-                auto trim = [](string &value)
-                {
-                    size_t start = value.find_first_not_of(" \t");
-                    size_t end = value.find_last_not_of(" \t");
-
-                    if (start == string::npos)
-                    {
-                        value.clear();
-                    }
-                    else
-                    {
-                        value = value.substr(start, end - start + 1);
-                    }
-                };
-
                 // Split conditions using AND or OR.
-                auto splitConditions = [](const string &text, const string &delimiter)
+                auto splitConditions = [](const string &text,
+                                          const string &delimiter)
                 {
                     vector<string> parts;
                     size_t start = 0;
                     size_t pos;
 
-                    while ((pos = text.find(delimiter, start)) != string::npos)
+                    while ((pos = text.find(delimiter, start)) !=
+                           string::npos)
                     {
                         parts.push_back(text.substr(start, pos - start));
                         start = pos + delimiter.length();
@@ -1024,54 +1081,42 @@ void DatabaseManager::start()
                     long long expectedNumber;
                 };
 
-                // Each inner vector represents conditions joined by AND.
-                // Different inner vectors are joined by OR.
                 vector<vector<ParsedCondition>> conditionGroups;
 
                 string errorMessage;
 
                 // Split the complete condition using OR.
-                vector<string> orGroups = splitConditions(condition, " or ");
+                vector<string> orGroups = splitConditions(
+                    condition, " or ");
 
                 for (const string &orGroup : orGroups)
                 {
                     vector<ParsedCondition> andConditions;
 
                     // Split each OR group using AND.
-                    vector<string> parts = splitConditions(orGroup, " and ");
+                    vector<string> parts = splitConditions(
+                        orGroup, " and ");
 
                     for (string part : parts)
                     {
                         trim(part);
 
-                        // Identify the comparison operator.
+                        // Identify comparison operator.
                         string op;
                         size_t operatorPos = string::npos;
 
                         if ((operatorPos = part.find(">=")) != string::npos)
-                        {
                             op = ">=";
-                        }
                         else if ((operatorPos = part.find("<=")) != string::npos)
-                        {
                             op = "<=";
-                        }
                         else if ((operatorPos = part.find("!=")) != string::npos)
-                        {
                             op = "!=";
-                        }
                         else if ((operatorPos = part.find(">")) != string::npos)
-                        {
                             op = ">";
-                        }
                         else if ((operatorPos = part.find("<")) != string::npos)
-                        {
                             op = "<";
-                        }
                         else if ((operatorPos = part.find("=")) != string::npos)
-                        {
                             op = "=";
-                        }
                         else
                         {
                             errorMessage = "Unsupported comparison operator.";
@@ -1101,7 +1146,7 @@ void DatabaseManager::start()
                                 1, expectedValue.size() - 2);
                         }
 
-                        // Find the column index.
+                        // Find the WHERE column index.
                         size_t columnIndex = columns.size();
 
                         for (size_t i = 0; i < columns.size(); i++)
@@ -1124,11 +1169,11 @@ void DatabaseManager::start()
                         string columnType = columns[columnIndex].type;
 
                         bool isNumeric =
-                            columnType == "int" || columnType == "integer";
+                            columnType == "int" ||
+                            columnType == "integer";
 
                         long long expectedNumber = 0;
 
-                        // Convert expected value to a number if necessary.
                         if (isNumeric)
                         {
                             try
@@ -1151,7 +1196,6 @@ void DatabaseManager::start()
                             }
                         }
 
-                        // Store the parsed condition.
                         andConditions.push_back({columnIndex,
                                                  op,
                                                  expectedValue,
@@ -1167,7 +1211,6 @@ void DatabaseManager::start()
                     conditionGroups.push_back(andConditions);
                 }
 
-                // Stop if any condition is invalid.
                 if (!errorMessage.empty())
                 {
                     cout << "Error: " << errorMessage << endl;
@@ -1181,12 +1224,10 @@ void DatabaseManager::start()
                 {
                     bool rowMatchesAnyGroup = false;
 
-                    // Evaluate OR groups.
                     for (const auto &group : conditionGroups)
                     {
                         bool groupMatches = true;
 
-                        // All conditions inside a group must match.
                         for (const auto &current : group)
                         {
                             if (current.columnIndex >= row.size())
@@ -1277,69 +1318,54 @@ void DatabaseManager::start()
             }
 
             // Calculate column widths.
-            vector<size_t> widths;
+            vector<int> widths(selectedIndexes.size(), 0);
 
-            for (const auto &column : columns)
+            for (size_t i = 0; i < selectedIndexes.size(); i++)
             {
-                widths.push_back(column.name.length());
+                widths[i] = static_cast<int>(
+                    columns[selectedIndexes[i]].name.length());
             }
 
             for (const auto &row : rows)
             {
-                for (size_t i = 0; i < row.size() && i < widths.size(); i++)
+                for (size_t i = 0; i < selectedIndexes.size(); i++)
                 {
-                    widths[i] = max(widths[i], row[i].length());
+                    size_t index = selectedIndexes[i];
+
+                    if (index < row.size())
+                    {
+                        widths[i] = max(
+                            widths[i],
+                            static_cast<int>(row[index].length()));
+                    }
                 }
             }
 
-            // Print table header.
-            cout << endl;
-
-            for (size_t width : widths)
+            // Display column headers.
+            for (size_t i = 0; i < selectedIndexes.size(); i++)
             {
-                cout << "+-" << string(width, '-') << "-";
-            }
-            cout << "+" << endl;
-
-            cout << "|";
-
-            for (size_t i = 0; i < columns.size(); i++)
-            {
-                cout << " " << left << setw(widths[i])
-                     << columns[i].name << " |";
+                cout << left << setw(widths[i] + 2)
+                     << columns[selectedIndexes[i]].name;
             }
 
             cout << endl;
 
-            for (size_t width : widths)
-            {
-                cout << "+-" << string(width, '-') << "-";
-            }
-            cout << "+" << endl;
-
-            // Print records.
+            // Display selected records.
             for (const auto &row : rows)
             {
-                cout << "|";
-
-                for (size_t i = 0; i < columns.size(); i++)
+                for (size_t i = 0; i < selectedIndexes.size(); i++)
                 {
-                    string value = (i < row.size()) ? row[i] : "";
+                    size_t index = selectedIndexes[i];
 
-                    cout << " " << left << setw(widths[i])
-                         << value << " |";
+                    string value = index < row.size() ? row[index] : "";
+
+                    cout << left << setw(widths[i] + 2) << value;
                 }
-
+                
                 cout << endl;
             }
 
-            for (size_t width : widths)
-            {
-                cout << "+-" << string(width, '-') << "-";
-            }
-            cout << "+" << endl;
-
-            cout << rows.size() << " rows returned." << endl;
+            cout << rows.size() << " row(s) selected." << endl;
         }
 
         else
