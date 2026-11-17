@@ -638,11 +638,13 @@ void DatabaseManager::start()
                 }
             }
 
-            // Update matching records.
-            int updatedCount = 0;
+            // Identify matching records without modifying them.
+            vector<size_t> matchingRows;
 
-            for (auto &row : rows)
+            for (size_t i = 0; i < rows.size(); i++)
             {
+                const auto &row = rows[i];
+
                 if (updateIndex >= row.size() ||
                     whereIndex >= row.size())
                 {
@@ -703,10 +705,81 @@ void DatabaseManager::start()
 
                 if (matches)
                 {
-                    row[updateIndex] = updateValue;
-                    updatedCount++;
+                    matchingRows.push_back(i);
                 }
             }
+
+            // Check NOT NULL constraint.
+            if (columns[updateIndex].notNull &&
+                !matchingRows.empty() &&
+                updateValue.empty())
+            {
+                cout << "Error: Cannot assign an empty value to a NOT NULL column."
+                     << endl;
+                continue;
+            }
+
+            // Check PRIMARY KEY uniqueness.
+            if (columns[updateIndex].primaryKey &&
+                !matchingRows.empty())
+            {
+                vector<string> primaryKeyValues;
+
+                bool duplicateKey = false;
+
+                for (size_t i = 0; i < rows.size(); i++)
+                {
+                    if (updateIndex >= rows[i].size())
+                    {
+                        duplicateKey = true;
+                        break;
+                    }
+
+                    // Use the new value for rows being updated.
+                    string keyValue = rows[i][updateIndex];
+
+                    for (size_t index : matchingRows)
+                    {
+                        if (index == i)
+                        {
+                            keyValue = updateValue;
+                            break;
+                        }
+                    }
+
+                    // Check for duplicate primary key values.
+                    for (const string &existingKey : primaryKeyValues)
+                    {
+                        if (existingKey == keyValue)
+                        {
+                            duplicateKey = true;
+                            break;
+                        }
+                    }
+
+                    if (duplicateKey)
+                    {
+                        break;
+                    }
+
+                    primaryKeyValues.push_back(keyValue);
+                }
+
+                if (duplicateKey)
+                {
+                    cout << "Error: Duplicate PRIMARY KEY value."
+                         << endl;
+                    continue;
+                }
+            }
+
+            // Apply the update after all validations pass.
+            for (size_t index : matchingRows)
+            {
+                rows[index][updateIndex] = updateValue;
+            }
+
+            int updatedCount = static_cast<int>(matchingRows.size());
 
             // Save the modified records.
             if (storage.saveRows(activeDatabase, tableName, rows))
