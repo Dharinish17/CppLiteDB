@@ -300,22 +300,17 @@ bool StorageManager::insertRow(
 
     for (size_t i = 0; i < columns.size(); i++)
     {
-        // Reject empty values in NOT NULL columns.
+        // Enforce NOT NULL
         if (columns[i].notNull && values[i].empty())
-        {
             return false;
-        }
 
-        // Reject duplicate PRIMARY KEY values.
-        if (columns[i].primaryKey)
+        // Enforce PRIMARY KEY and UNIQUE
+        if (columns[i].primaryKey || (columns[i].unique && !values[i].empty()))
         {
             for (const auto &existingRow : existingRows)
             {
-                if (i < existingRow.size() &&
-                    existingRow[i] == values[i])
-                {
+                if (i < existingRow.size() && existingRow[i] == values[i])
                     return false;
-                }
             }
         }
     }
