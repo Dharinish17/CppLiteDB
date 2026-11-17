@@ -38,7 +38,8 @@ public:
         const std::string &database,
         const std::string &tableName);
 
-    bool updateRows(
+    // Both UPDATE and DELETE of rows
+    bool saveRows(
         const std::string &database,
         const std::string &tableName,
         const std::vector<std::vector<std::string>> &rows);

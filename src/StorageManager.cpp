@@ -370,8 +370,8 @@ vector<vector<string>> StorageManager::getRows(
     return rows;
 }
 
-// UPDATE a row in a table
-bool StorageManager::updateRows(
+// UPDATE and DELETE a row in a table
+bool StorageManager::saveRows(
     const string &database,
     const string &tableName,
     const vector<vector<string>> &rows)

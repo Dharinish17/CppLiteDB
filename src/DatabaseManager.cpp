@@ -367,7 +367,7 @@ void DatabaseManager::start()
             }
         }
 
-        //UPDATE a row in a table
+        // UPDATE a row in a table
         else if (normalized.rfind("update ", 0) == 0)
         {
             if (activeDatabase.empty())
@@ -393,8 +393,7 @@ void DatabaseManager::start()
             // Extract SET assignment.
             string assignment = normalized.substr(
                 setPos + 5,
-                wherePos - (setPos + 5)
-            );
+                wherePos - (setPos + 5));
 
             // Extract WHERE condition.
             string condition = normalized.substr(wherePos + 7);
@@ -440,8 +439,7 @@ void DatabaseManager::start()
                 updateValue.back() == '\'')
             {
                 updateValue = updateValue.substr(
-                    1, updateValue.size() - 2
-                );
+                    1, updateValue.size() - 2);
             }
 
             if (updateColumn.empty() || updateValue.empty())
@@ -452,8 +450,7 @@ void DatabaseManager::start()
 
             // Get table columns and records.
             vector<Column> columns = storage.getTableColumns(
-                activeDatabase, tableName
-            );
+                activeDatabase, tableName);
 
             if (columns.empty())
             {
@@ -462,8 +459,7 @@ void DatabaseManager::start()
             }
 
             vector<vector<string>> rows = storage.getRows(
-                activeDatabase, tableName
-            );
+                activeDatabase, tableName);
 
             // Find the column to update.
             size_t updateIndex = columns.size();
@@ -531,8 +527,7 @@ void DatabaseManager::start()
             // Extract WHERE column and expected value.
             string whereColumn = condition.substr(0, operatorPos);
             string expectedValue = condition.substr(
-                operatorPos + op.length()
-            );
+                operatorPos + op.length());
 
             trim(whereColumn);
             trim(expectedValue);
@@ -549,8 +544,7 @@ void DatabaseManager::start()
                 expectedValue.back() == '\'')
             {
                 expectedValue = expectedValue.substr(
-                    1, expectedValue.size() - 2
-                );
+                    1, expectedValue.size() - 2);
             }
 
             // Find the WHERE column index.
@@ -621,8 +615,7 @@ void DatabaseManager::start()
                         size_t parsed = 0;
 
                         long long actualNumber = stoll(
-                            row[whereIndex], &parsed
-                        );
+                            row[whereIndex], &parsed);
 
                         if (parsed != row[whereIndex].length())
                         {
@@ -673,7 +666,7 @@ void DatabaseManager::start()
             }
 
             // Save the modified records.
-            if (storage.updateRows(activeDatabase, tableName, rows))
+            if (storage.saveRows(activeDatabase, tableName, rows))
             {
                 cout << updatedCount << " row(s) updated successfully."
                      << endl;
@@ -681,6 +674,254 @@ void DatabaseManager::start()
             else
             {
                 cout << "Error: Could not update records." << endl;
+            }
+        }
+
+
+        // DELETE command.
+        else if (normalized.rfind("delete from ", 0) == 0)
+        {
+            if (activeDatabase.empty())
+            {
+                cout << "Error: Select a database first." << endl;
+                continue;
+            }
+
+            // Find WHERE keyword.
+            size_t wherePos = normalized.find(" where ");
+
+            if (wherePos == string::npos)
+            {
+                cout << "Error: DELETE requires a WHERE condition." << endl;
+                continue;
+            }
+
+            // Extract table name and WHERE condition.
+            string tableName = normalized.substr(12, wherePos - 12);
+            string condition = normalized.substr(wherePos + 7);
+
+            // Remove extra spaces.
+            auto trim = [](string &value)
+            {
+                size_t start = value.find_first_not_of(" \t");
+                size_t end = value.find_last_not_of(" \t");
+
+                if (start == string::npos)
+                {
+                    value.clear();
+                }
+                else
+                {
+                    value = value.substr(start, end - start + 1);
+                }
+            };
+
+            trim(tableName);
+            trim(condition);
+
+            if (tableName.empty() || condition.empty())
+            {
+                cout << "Error: Invalid DELETE syntax." << endl;
+                continue;
+            }
+
+            // Get table columns and records.
+            vector<Column> columns = storage.getTableColumns(
+                activeDatabase, tableName
+            );
+
+            if (columns.empty())
+            {
+                cout << "Error: Table does not exist." << endl;
+                continue;
+            }
+
+            vector<vector<string>> rows = storage.getRows(
+                activeDatabase, tableName
+            );
+
+            // Identify the comparison operator.
+            string op;
+            size_t operatorPos = string::npos;
+
+            if ((operatorPos = condition.find(">=")) != string::npos)
+                op = ">=";
+            else if ((operatorPos = condition.find("<=")) != string::npos)
+                op = "<=";
+            else if ((operatorPos = condition.find("!=")) != string::npos)
+                op = "!=";
+            else if ((operatorPos = condition.find(">")) != string::npos)
+                op = ">";
+            else if ((operatorPos = condition.find("<")) != string::npos)
+                op = "<";
+            else if ((operatorPos = condition.find("=")) != string::npos)
+                op = "=";
+            else
+            {
+                cout << "Error: Unsupported WHERE operator." << endl;
+                continue;
+            }
+
+            // Extract column name and expected value.
+            string columnName = condition.substr(0, operatorPos);
+            string expectedValue = condition.substr(
+                operatorPos + op.length()
+            );
+
+            trim(columnName);
+            trim(expectedValue);
+
+            if (columnName.empty() || expectedValue.empty())
+            {
+                cout << "Error: Invalid WHERE condition." << endl;
+                continue;
+            }
+
+            // Remove surrounding single quotes.
+            if (expectedValue.size() >= 2 &&
+                expectedValue.front() == '\'' &&
+                expectedValue.back() == '\'')
+            {
+                expectedValue = expectedValue.substr(
+                    1, expectedValue.size() - 2
+                );
+            }
+
+            // Find the column index.
+            size_t columnIndex = columns.size();
+
+            for (size_t i = 0; i < columns.size(); i++)
+            {
+                if (columns[i].name == columnName)
+                {
+                    columnIndex = i;
+                    break;
+                }
+            }
+
+            if (columnIndex == columns.size())
+            {
+                cout << "Error: Column '" << columnName
+                     << "' does not exist." << endl;
+                continue;
+            }
+
+            // Check whether the column is numeric.
+            string columnType = columns[columnIndex].type;
+
+            bool isNumeric =
+                columnType == "int" || columnType == "integer";
+
+            long long expectedNumber = 0;
+
+            if (isNumeric)
+            {
+                try
+                {
+                    size_t parsed = 0;
+
+                    expectedNumber = stoll(expectedValue, &parsed);
+
+                    if (parsed != expectedValue.length())
+                    {
+                        throw invalid_argument("Invalid number");
+                    }
+                }
+                catch (...)
+                {
+                    cout << "Error: Invalid numeric comparison value."
+                         << endl;
+                    continue;
+                }
+            }
+
+            // Keep only records that do not match the condition.
+            vector<vector<string>> remainingRows;
+            int deletedCount = 0;
+
+            for (const auto &row : rows)
+            {
+                if (columnIndex >= row.size())
+                {
+                    remainingRows.push_back(row);
+                    continue;
+                }
+
+                bool matches = false;
+
+                if (isNumeric)
+                {
+                    try
+                    {
+                        size_t parsed = 0;
+
+                        long long actualNumber = stoll(
+                            row[columnIndex], &parsed
+                        );
+
+                        if (parsed != row[columnIndex].length())
+                        {
+                            remainingRows.push_back(row);
+                            continue;
+                        }
+
+                        if (op == "=")
+                            matches = actualNumber == expectedNumber;
+                        else if (op == "!=")
+                            matches = actualNumber != expectedNumber;
+                        else if (op == ">")
+                            matches = actualNumber > expectedNumber;
+                        else if (op == "<")
+                            matches = actualNumber < expectedNumber;
+                        else if (op == ">=")
+                            matches = actualNumber >= expectedNumber;
+                        else if (op == "<=")
+                            matches = actualNumber <= expectedNumber;
+                    }
+                    catch (...)
+                    {
+                        remainingRows.push_back(row);
+                        continue;
+                    }
+                }
+                else
+                {
+                    string actualValue = row[columnIndex];
+
+                    if (op == "=")
+                        matches = actualValue == expectedValue;
+                    else if (op == "!=")
+                        matches = actualValue != expectedValue;
+                    else if (op == ">")
+                        matches = actualValue > expectedValue;
+                    else if (op == "<")
+                        matches = actualValue < expectedValue;
+                    else if (op == ">=")
+                        matches = actualValue >= expectedValue;
+                    else if (op == "<=")
+                        matches = actualValue <= expectedValue;
+                }
+
+                if (matches)
+                {
+                    deletedCount++;
+                }
+                else
+                {
+                    remainingRows.push_back(row);
+                }
+            }
+
+            // Save the remaining records.
+            if (storage.saveRows(
+                    activeDatabase, tableName, remainingRows))
+            {
+                cout << deletedCount << " row(s) deleted successfully."
+                     << endl;
+            }
+            else
+            {
+                cout << "Error: Could not delete records." << endl;
             }
         }
 
