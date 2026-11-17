@@ -944,18 +944,24 @@ void DatabaseManager::start()
             // Find WHERE and ORDER BY keywords.
             size_t wherePos = normalized.find(" where ", fromPos);
             size_t orderPos = normalized.find(" order by ", fromPos);
+            size_t limitPos = normalized.find(" limit ", fromPos);
 
             // Determine where the table name ends.
             size_t tableEnd = normalized.length();
 
             if (wherePos != string::npos)
             {
-                tableEnd = wherePos;
+                tableEnd = min(tableEnd, wherePos);
             }
 
-            if (orderPos != string::npos && orderPos < tableEnd)
+            if (orderPos != string::npos)
             {
-                tableEnd = orderPos;
+                tableEnd = min(tableEnd, orderPos);
+            }
+
+            if (limitPos != string::npos)
+            {
+                tableEnd = min(tableEnd, limitPos);
             }
 
             // Extract table name.
@@ -1058,7 +1064,12 @@ void DatabaseManager::start()
 
                 if (orderPos != string::npos && orderPos > wherePos)
                 {
-                    conditionEnd = orderPos;
+                    conditionEnd = min(conditionEnd, orderPos);
+                }
+
+                if (limitPos != string::npos && limitPos > wherePos)
+                {
+                    conditionEnd = min(conditionEnd, limitPos);
                 }
 
                 string condition = normalized.substr(
@@ -1334,7 +1345,16 @@ void DatabaseManager::start()
             // Apply ORDER BY if provided.
             if (orderPos != string::npos)
             {
-                string orderClause = normalized.substr(orderPos + 10);
+                size_t orderEnd = normalized.length();
+
+                if (limitPos != string::npos && limitPos > orderPos)
+                {
+                    orderEnd = limitPos;
+                }
+
+                string orderClause = normalized.substr(
+                    orderPos + 10,
+                    orderEnd - (orderPos + 10));
 
                 trim(orderClause);
 
@@ -1434,6 +1454,41 @@ void DatabaseManager::start()
                 {
                     cout << "Error: Unable to sort records." << endl;
                     continue;
+                }
+            }
+
+            // Apply LIMIT if provided.
+            if (limitPos != string::npos)
+            {
+                string limitText = normalized.substr(limitPos + 7);
+
+                trim(limitText);
+
+                // Convert LIMIT value to an integer.
+                size_t parsed = 0;
+                long long limitValue = 0;
+
+                try
+                {
+                    limitValue = stoll(limitText, &parsed);
+
+                    if (parsed != limitText.length() ||
+                        limitValue < 0)
+                    {
+                        throw invalid_argument("Invalid LIMIT");
+                    }
+                }
+                catch (...)
+                {
+                    cout << "Error: LIMIT must be a non-negative integer."
+                         << endl;
+                    continue;
+                }
+
+                // Keep only the requested number of records.
+                if (static_cast<unsigned long long>(limitValue) < rows.size())
+                {
+                    rows.resize(static_cast<size_t>(limitValue));
                 }
             }
 
