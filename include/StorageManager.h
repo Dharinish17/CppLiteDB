@@ -8,6 +8,8 @@ struct Column
 {
     std::string name;
     std::string type;
+    bool primaryKey = false;
+    bool notNull = false;
 };
 
 class StorageManager

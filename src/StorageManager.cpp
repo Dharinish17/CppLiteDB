@@ -106,7 +106,19 @@ bool StorageManager::createTable(const string &database, const string &tableName
     {
         output << "COLUMN "
                << column.name << " "
-               << column.type << "\n";
+               << column.type;
+
+        if (column.primaryKey)
+        {
+            output << " PRIMARY_KEY";
+        }
+
+        if (column.notNull)
+        {
+            output << " NOT_NULL";
+        }
+
+        output << "\n";
     }
 
     output << "END_TABLE\n";
@@ -151,11 +163,11 @@ vector<string> StorageManager::getTables(const string &database) const
 }
 
 // DESCRIBE table
+
 vector<Column> StorageManager::getTableColumns(
     const string &database,
     const string &tableName) const
 {
-
     vector<Column> columns;
 
     string path = "data/" + database + ".db";
@@ -172,7 +184,6 @@ vector<Column> StorageManager::getTableColumns(
 
     while (getline(file, line))
     {
-
         // Check whether this is the requested table
         if (line == "TABLE " + tableName)
         {
@@ -189,13 +200,27 @@ vector<Column> StorageManager::getTableColumns(
         // Extract column information
         if (tableFound && line.find("COLUMN ") == 0)
         {
-
             stringstream ss(line.substr(7));
 
             Column column;
+            string constraint;
 
             if (ss >> column.name >> column.type)
             {
+                // Read column constraints
+                while (ss >> constraint)
+                {
+                    if (constraint == "PRIMARY_KEY")
+                    {
+                        column.primaryKey = true;
+                        column.notNull = true;
+                    }
+                    else if (constraint == "NOT_NULL")
+                    {
+                        column.notNull = true;
+                    }
+                }
+
                 columns.push_back(column);
             }
         }

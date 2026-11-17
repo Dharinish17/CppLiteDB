@@ -114,7 +114,6 @@ void DatabaseManager::start()
         // CREATE table
         else if (normalized.find("create table ") == 0)
         {
-
             // A database must be selected first
             if (activeDatabase.empty())
             {
@@ -130,7 +129,6 @@ void DatabaseManager::start()
                 closeBracket == string::npos ||
                 closeBracket < openBracket)
             {
-
                 cout << "Error: Invalid CREATE TABLE syntax." << endl;
                 continue;
             }
@@ -161,10 +159,10 @@ void DatabaseManager::start()
             string definition;
 
             bool valid = true;
+            bool hasPrimaryKey = false;
 
             while (getline(ss, definition, ','))
             {
-
                 stringstream columnStream(definition);
 
                 Column column;
@@ -175,22 +173,67 @@ void DatabaseManager::start()
                     break;
                 }
 
-                string extra;
-
-                if (columnStream >> extra)
-                {
-                    valid = false;
-                    break;
-                }
-
                 // Check supported data types
                 if (column.type != "int" &&
                     column.type != "integer" &&
                     column.type.find("varchar(") != 0)
                 {
-
                     valid = false;
                     break;
+                }
+
+                // Parse constraints
+                string constraint;
+
+                while (columnStream >> constraint)
+                {
+                    if (constraint == "primary")
+                    {
+                        string keyWord;
+
+                        if (!(columnStream >> keyWord) || keyWord != "key")
+                        {
+                            valid = false;
+                            break;
+                        }
+
+                        column.primaryKey = true;
+                        column.notNull = true;
+                    }
+                    else if (constraint == "not")
+                    {
+                        string nullWord;
+
+                        if (!(columnStream >> nullWord) || nullWord != "null")
+                        {
+                            valid = false;
+                            break;
+                        }
+
+                        column.notNull = true;
+                    }
+                    else
+                    {
+                        valid = false;
+                        break;
+                    }
+                }
+
+                if (!valid)
+                {
+                    break;
+                }
+
+                // Support only one primary key column per table for now
+                if (column.primaryKey)
+                {
+                    if (hasPrimaryKey)
+                    {
+                        valid = false;
+                        break;
+                    }
+
+                    hasPrimaryKey = true;
                 }
 
                 columns.push_back(column);
@@ -198,7 +241,7 @@ void DatabaseManager::start()
 
             if (!valid || columns.empty())
             {
-                cout << "Error: Invalid column definition or unsupported data type."
+                cout << "Error: Invalid column definition or unsupported data type/constraint."
                      << endl;
                 continue;
             }
