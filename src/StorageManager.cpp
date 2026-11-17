@@ -118,6 +118,11 @@ bool StorageManager::createTable(const string &database, const string &tableName
             output << " NOT_NULL";
         }
 
+        if (column.unique)
+        {
+            output << " UNIQUE";
+        }
+
         output << "\n";
     }
 
@@ -218,6 +223,10 @@ vector<Column> StorageManager::getTableColumns(
                     else if (constraint == "NOT_NULL")
                     {
                         column.notNull = true;
+                    }
+                    else if (constraint == "UNIQUE")
+                    {
+                        column.unique = true;
                     }
                 }
 

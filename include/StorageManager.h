@@ -10,6 +10,7 @@ struct Column
     std::string type;
     bool primaryKey = false;
     bool notNull = false;
+    bool unique = false;
 };
 
 class StorageManager

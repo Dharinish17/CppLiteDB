@@ -212,6 +212,10 @@ void DatabaseManager::start()
 
                         column.notNull = true;
                     }
+                    else if (constraint == "unique")
+                    {
+                        column.unique = true;
+                    }
                     else
                     {
                         valid = false;
