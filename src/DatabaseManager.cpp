@@ -724,7 +724,7 @@ void DatabaseManager::start()
             }
 
             // Check PRIMARY KEY uniqueness.
-            if (columns[updateIndex].primaryKey &&
+            if ((columns[updateIndex].primaryKey || columns[updateIndex].unique) &&
                 !matchingRows.empty())
             {
                 vector<string> primaryKeyValues;
@@ -751,6 +751,14 @@ void DatabaseManager::start()
                         }
                     }
 
+                    // Allow multiple empty values in UNIQUE columns.
+                    if (columns[updateIndex].unique &&
+                        !columns[updateIndex].primaryKey &&
+                        keyValue.empty())
+                    {
+                        continue;
+                    }
+
                     // Check for duplicate primary key values.
                     for (const string &existingKey : primaryKeyValues)
                     {
@@ -771,7 +779,7 @@ void DatabaseManager::start()
 
                 if (duplicateKey)
                 {
-                    cout << "Error: Duplicate PRIMARY KEY value."
+                    cout << "Error: Duplicate PRIMARY KEY or UNIQUE value."
                          << endl;
                     continue;
                 }
