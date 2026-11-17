@@ -941,22 +941,27 @@ void DatabaseManager::start()
             string selectedColumnText = normalized.substr(
                 7, fromPos - 7);
 
-            // Find WHERE keyword.
+            // Find WHERE and ORDER BY keywords.
             size_t wherePos = normalized.find(" where ", fromPos);
+            size_t orderPos = normalized.find(" order by ", fromPos);
+
+            // Determine where the table name ends.
+            size_t tableEnd = normalized.length();
+
+            if (wherePos != string::npos)
+            {
+                tableEnd = wherePos;
+            }
+
+            if (orderPos != string::npos && orderPos < tableEnd)
+            {
+                tableEnd = orderPos;
+            }
 
             // Extract table name.
-            string tableName;
-
-            if (wherePos == string::npos)
-            {
-                tableName = normalized.substr(fromPos + 6);
-            }
-            else
-            {
-                tableName = normalized.substr(
-                    fromPos + 6,
-                    wherePos - (fromPos + 6));
-            }
+            string tableName = normalized.substr(
+                fromPos + 6,
+                tableEnd - (fromPos + 6));
 
             // Remove extra spaces.
             auto trim = [](string &value)
@@ -1049,7 +1054,16 @@ void DatabaseManager::start()
             // Apply WHERE condition if provided.
             if (wherePos != string::npos)
             {
-                string condition = normalized.substr(wherePos + 7);
+                size_t conditionEnd = normalized.length();
+
+                if (orderPos != string::npos && orderPos > wherePos)
+                {
+                    conditionEnd = orderPos;
+                }
+
+                string condition = normalized.substr(
+                    wherePos + 7,
+                    conditionEnd - (wherePos + 7));
 
                 // Split conditions using AND or OR.
                 auto splitConditions = [](const string &text,
@@ -1317,6 +1331,112 @@ void DatabaseManager::start()
                 rows = filteredRows;
             }
 
+            // Apply ORDER BY if provided.
+            if (orderPos != string::npos)
+            {
+                string orderClause = normalized.substr(orderPos + 10);
+
+                trim(orderClause);
+
+                // Extract column name and sorting direction.
+                stringstream orderStream(orderClause);
+
+                string orderColumn;
+                string direction;
+                string extra;
+
+                orderStream >> orderColumn;
+                orderStream >> direction;
+                orderStream >> extra;
+
+                if (orderColumn.empty() || !extra.empty() ||
+                    (!direction.empty() &&
+                     direction != "asc" && direction != "desc"))
+                {
+                    cout << "Error: Invalid ORDER BY syntax." << endl;
+                    continue;
+                }
+
+                // Find the sorting column.
+                size_t orderIndex = columns.size();
+
+                for (size_t i = 0; i < columns.size(); i++)
+                {
+                    if (columns[i].name == orderColumn)
+                    {
+                        orderIndex = i;
+                        break;
+                    }
+                }
+
+                if (orderIndex == columns.size())
+                {
+                    cout << "Error: Column '" << orderColumn
+                         << "' does not exist." << endl;
+                    continue;
+                }
+
+                // Determine sorting direction.
+                bool descending = direction == "desc";
+
+                // Determine whether the column is numeric.
+                string orderType = columns[orderIndex].type;
+
+                bool isNumeric =
+                    orderType == "int" || orderType == "integer";
+
+                // Sort the filtered records.
+                try
+                {
+                    // Validate numeric values before sorting.
+                    if (isNumeric)
+                    {
+                        for (const auto &row : rows)
+                        {
+                            if (orderIndex >= row.size())
+                            {
+                                throw invalid_argument("Invalid row");
+                            }
+
+                            size_t parsed = 0;
+
+                            stoll(row[orderIndex], &parsed);
+
+                            if (parsed != row[orderIndex].length())
+                            {
+                                throw invalid_argument("Invalid number");
+                            }
+                        }
+                    }
+
+                    stable_sort(
+                        rows.begin(),
+                        rows.end(),
+                        [&](const vector<string> &a,
+                            const vector<string> &b)
+                        {
+                            if (isNumeric)
+                            {
+                                long long valueA = stoll(a[orderIndex]);
+                                long long valueB = stoll(b[orderIndex]);
+
+                                return descending
+                                           ? valueA > valueB
+                                           : valueA < valueB;
+                            }
+
+                            return descending
+                                       ? a[orderIndex] > b[orderIndex]
+                                       : a[orderIndex] < b[orderIndex];
+                        });
+                }
+                catch (...)
+                {
+                    cout << "Error: Unable to sort records." << endl;
+                    continue;
+                }
+            }
+
             // Calculate column widths.
             vector<int> widths(selectedIndexes.size(), 0);
 
@@ -1361,7 +1481,7 @@ void DatabaseManager::start()
 
                     cout << left << setw(widths[i] + 2) << value;
                 }
-                
+
                 cout << endl;
             }
 
