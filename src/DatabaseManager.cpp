@@ -1002,10 +1002,106 @@ void DatabaseManager::start()
             vector<vector<string>> rows = storage.getRows(
                 activeDatabase, tableName);
 
+            // Detect aggregate functions.
+            string aggregateName;
+            string aggregateArgument;
+            size_t aggregateColumnIndex = columns.size();
+
+            bool isAggregate = false;
+
+            size_t openParen = selectedColumnText.find('(');
+            size_t closeParen = selectedColumnText.find(')');
+
+            if (openParen != string::npos ||
+                closeParen != string::npos)
+            {
+                if (openParen == string::npos ||
+                    closeParen == string::npos ||
+                    closeParen != selectedColumnText.length() - 1 ||
+                    closeParen <= openParen)
+                {
+                    cout << "Error: Invalid aggregate function syntax."
+                         << endl;
+                    continue;
+                }
+
+                aggregateName = selectedColumnText.substr(0, openParen);
+                aggregateArgument = selectedColumnText.substr(
+                    openParen + 1,
+                    closeParen - openParen - 1);
+
+                trim(aggregateName);
+                trim(aggregateArgument);
+
+                if (aggregateName != "count" &&
+                    aggregateName != "sum" &&
+                    aggregateName != "avg" &&
+                    aggregateName != "min" &&
+                    aggregateName != "max")
+                {
+                    cout << "Error: Unsupported aggregate function."
+                         << endl;
+                    continue;
+                }
+
+                if (aggregateArgument.empty())
+                {
+                    cout << "Error: Aggregate argument is missing."
+                         << endl;
+                    continue;
+                }
+
+                if (aggregateName == "count" &&
+                    aggregateArgument == "*")
+                {
+                    isAggregate = true;
+                }
+                else
+                {
+                    // Find the aggregate column.
+                    for (size_t i = 0; i < columns.size(); i++)
+                    {
+                        if (columns[i].name == aggregateArgument)
+                        {
+                            aggregateColumnIndex = i;
+                            break;
+                        }
+                    }
+
+                    if (aggregateColumnIndex == columns.size())
+                    {
+                        cout << "Error: Column '" << aggregateArgument
+                             << "' does not exist." << endl;
+                        continue;
+                    }
+
+                    isAggregate = true;
+                }
+
+                // SUM and AVG require numeric columns.
+                if (aggregateName == "sum" ||
+                    aggregateName == "avg")
+                {
+                    string type = columns[aggregateColumnIndex].type;
+
+                    if (type != "int" && type != "integer")
+                    {
+                        cout << "Error: " << aggregateName
+                             << "() requires a numeric column."
+                             << endl;
+                        continue;
+                    }
+                }
+            }
+
             // Determine which columns should be displayed.
             vector<size_t> selectedIndexes;
 
-            if (selectedColumnText == "*")
+            if (isAggregate)
+            {
+                // Aggregate queries produce one calculated result.
+            }
+            else if (selectedColumnText == "*")
             {
                 for (size_t i = 0; i < columns.size(); i++)
                 {
@@ -1490,6 +1586,178 @@ void DatabaseManager::start()
                 {
                     rows.resize(static_cast<size_t>(limitValue));
                 }
+            }
+
+            // Calculate aggregate result.
+            if (isAggregate)
+            {
+                string result;
+
+                if (aggregateName == "count")
+                {
+                    result = to_string(rows.size());
+
+                    if (aggregateArgument != "*")
+                    {
+                        size_t count = 0;
+
+                        for (const auto &row : rows)
+                        {
+                            if (aggregateColumnIndex < row.size() &&
+                                !row[aggregateColumnIndex].empty())
+                            {
+                                count++;
+                            }
+                        }
+
+                        result = to_string(count);
+                    }
+                }
+                else
+                {
+                    if (rows.empty())
+                    {
+                        cout << "Error: Cannot calculate "
+                             << aggregateName
+                             << "() on an empty result." << endl;
+                        continue;
+                    }
+
+                    bool isNumeric =
+                        columns[aggregateColumnIndex].type == "int" ||
+                        columns[aggregateColumnIndex].type == "integer";
+
+                    if (aggregateName == "sum" ||
+                        aggregateName == "avg" ||
+                        (isNumeric &&
+                         (aggregateName == "min" ||
+                          aggregateName == "max")))
+                    {
+                        long long total = 0;
+                        long long minimum = 0;
+                        long long maximum = 0;
+
+                        bool first = true;
+
+                        try
+                        {
+                            for (const auto &row : rows)
+                            {
+                                if (aggregateColumnIndex >= row.size())
+                                {
+                                    throw invalid_argument("Invalid row");
+                                }
+
+                                size_t parsed = 0;
+
+                                long long value = stoll(
+                                    row[aggregateColumnIndex], &parsed);
+
+                                if (parsed !=
+                                    row[aggregateColumnIndex].length())
+                                {
+                                    throw invalid_argument("Invalid number");
+                                }
+
+                                total += value;
+
+                                if (first)
+                                {
+                                    minimum = value;
+                                    maximum = value;
+                                    first = false;
+                                }
+                                else
+                                {
+                                    minimum = min(minimum, value);
+                                    maximum = max(maximum, value);
+                                }
+                            }
+                        }
+                        catch (...)
+                        {
+                            cout << "Error: Invalid numeric data."
+                                 << endl;
+                            continue;
+                        }
+
+                        if (aggregateName == "sum")
+                        {
+                            result = to_string(total);
+                        }
+                        else if (aggregateName == "avg")
+                        {
+                            double average =
+                                static_cast<double>(total) / rows.size();
+
+                            stringstream output;
+                            output << fixed << setprecision(2) << average;
+
+                            result = output.str();
+                        }
+                        else if (aggregateName == "min")
+                        {
+                            result = to_string(minimum);
+                        }
+                        else if (aggregateName == "max")
+                        {
+                            result = to_string(maximum);
+                        }
+                    }
+                    else
+                    {
+                        // MIN and MAX for string columns.
+                        string minimum;
+                        string maximum;
+
+                        bool first = true;
+
+                        for (const auto &row : rows)
+                        {
+                            if (aggregateColumnIndex >= row.size())
+                            {
+                                cout << "Error: Invalid row data."
+                                     << endl;
+                                first = false;
+                                break;
+                            }
+
+                            string value = row[aggregateColumnIndex];
+
+                            if (first)
+                            {
+                                minimum = value;
+                                maximum = value;
+                                first = false;
+                            }
+                            else
+                            {
+                                minimum = min(minimum, value);
+                                maximum = max(maximum, value);
+                            }
+                        }
+
+                        if (first)
+                        {
+                            cout << "Error: Invalid row data." << endl;
+                            continue;
+                        }
+
+                        result = aggregateName == "min"
+                                     ? minimum
+                                     : maximum;
+                    }
+                }
+
+                // Display aggregate result.
+                cout << left << setw(20)
+                     << selectedColumnText << endl;
+
+                cout << left << setw(20) << result << endl;
+
+                cout << "1 row selected." << endl;
+
+                continue;
             }
 
             // Calculate column widths.
