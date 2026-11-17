@@ -278,6 +278,39 @@ bool StorageManager::insertRow(
         return false;
     }
 
+    // Retrieve the table schema.
+    vector<Column> columns = getTableColumns(database, tableName);
+
+    if (columns.empty() || values.size() != columns.size())
+    {
+        return false;
+    }
+
+    // Validate NOT NULL and PRIMARY KEY constraints.
+    vector<vector<string>> existingRows = getRows(database, tableName);
+
+    for (size_t i = 0; i < columns.size(); i++)
+    {
+        // Reject empty values in NOT NULL columns.
+        if (columns[i].notNull && values[i].empty())
+        {
+            return false;
+        }
+
+        // Reject duplicate PRIMARY KEY values.
+        if (columns[i].primaryKey)
+        {
+            for (const auto &existingRow : existingRows)
+            {
+                if (i < existingRow.size() &&
+                    existingRow[i] == values[i])
+                {
+                    return false;
+                }
+            }
+        }
+    }
+
     // Prepare the row.
     string row;
 
@@ -306,6 +339,12 @@ bool StorageManager::insertRow(
     }
     else
     {
+        // Ensure the DATA section is properly terminated.
+        if (dataEnd == -1)
+        {
+            return false;
+        }
+
         // Insert the row before END_DATA.
         lines.insert(lines.begin() + dataEnd, row);
     }
