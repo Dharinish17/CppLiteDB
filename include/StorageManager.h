@@ -13,6 +13,9 @@ struct Column
     bool unique = false;
     bool hasCheck = false;
     std::string checkCondition;
+    bool isForeignKey = false;
+    std::string referencedTable;
+    std::string referencedColumn;
 };
 
 class StorageManager

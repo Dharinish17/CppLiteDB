@@ -128,6 +128,13 @@ bool StorageManager::createTable(const string &database, const string &tableName
             output << " CHECK " << column.checkCondition;
         }
 
+        if (column.isForeignKey)
+        {
+            output << " REFERENCES "
+                   << column.referencedTable << " "
+                   << column.referencedColumn;
+        }
+
         output << "\n";
     }
 
@@ -254,6 +261,17 @@ vector<Column> StorageManager::getTableColumns(
                         }
 
                         break;
+                    }
+                    else if (constraint == "REFERENCES")
+                    {
+                        column.isForeignKey = true;
+
+                        if (!(ss >> column.referencedTable >>
+                              column.referencedColumn))
+                        {
+                            file.close();
+                            return {};
+                        }
                     }
                 }
 

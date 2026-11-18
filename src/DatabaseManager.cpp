@@ -216,6 +216,66 @@ void DatabaseManager::start()
                     {
                         column.unique = true;
                     }
+                    else if (constraint == "references")
+                    {
+                        string referenceSpec;
+
+                        if (!(columnStream >> referenceSpec))
+                        {
+                            valid = false;
+                            break;
+                        }
+
+                        // Find the opening and closing parentheses
+                        size_t refOpen = referenceSpec.find('(');
+                        size_t refClose = referenceSpec.find(')');
+
+                        if (refOpen == string::npos)
+                        {
+                            // Handle REFERENCES departments (id)
+                            string columnSpec;
+
+                            if (!(columnStream >> columnSpec))
+                            {
+                                valid = false;
+                                break;
+                            }
+
+                            if (columnSpec.size() < 3 ||
+                                columnSpec.front() != '(' ||
+                                columnSpec.back() != ')')
+                            {
+                                valid = false;
+                                break;
+                            }
+
+                            column.referencedTable = referenceSpec;
+                            column.referencedColumn =
+                                columnSpec.substr(1, columnSpec.size() - 2);
+                        }
+                        else
+                        {
+                            // Handle REFERENCES departments(id)
+                            if (refClose == string::npos ||
+                                refOpen == 0 ||
+                                refClose != referenceSpec.size() - 1 ||
+                                refClose <= refOpen + 1)
+                            {
+                                valid = false;
+                                break;
+                            }
+
+                            column.referencedTable =
+                                referenceSpec.substr(0, refOpen);
+
+                            column.referencedColumn =
+                                referenceSpec.substr(
+                                    refOpen + 1,
+                                    refClose - refOpen - 1);
+                        }
+
+                        column.isForeignKey = true;
+                    }
                     else if (constraint == "check")
                     {
                         column.hasCheck = true;
@@ -296,6 +356,100 @@ void DatabaseManager::start()
             {
                 cout << "Error: Invalid column definition or unsupported data type/constraint."
                      << endl;
+                continue;
+            }
+
+            // Validate FOREIGN KEY references
+            bool foreignKeyValid = true;
+
+            for (const auto &column : columns)
+            {
+                if (!column.isForeignKey)
+                {
+                    continue;
+                }
+
+                // Check whether the referenced table exists
+                vector<string> existingTables =
+                    storage.getTables(activeDatabase);
+
+                bool referencedTableExists = false;
+
+                for (const string &table : existingTables)
+                {
+                    if (table == column.referencedTable)
+                    {
+                        referencedTableExists = true;
+                        break;
+                    }
+                }
+
+                if (!referencedTableExists)
+                {
+                    cout << "Error: Referenced table '"
+                         << column.referencedTable
+                         << "' does not exist." << endl;
+
+                    foreignKeyValid = false;
+                    break;
+                }
+
+                // Get columns of the referenced table
+                vector<Column> referencedColumns =
+                    storage.getTableColumns(
+                        activeDatabase,
+                        column.referencedTable);
+
+                bool referencedColumnExists = false;
+                bool referencedColumnValid = false;
+
+                for (const auto &referencedColumn : referencedColumns)
+                {
+                    if (referencedColumn.name == column.referencedColumn)
+                    {
+                        referencedColumnExists = true;
+
+                        // Referenced column must be PRIMARY KEY or UNIQUE
+                        if (referencedColumn.primaryKey ||
+                            referencedColumn.unique)
+                        {
+                            referencedColumnValid = true;
+                        }
+
+                        // Referencing and referenced column types must match
+                        if (referencedColumn.type != column.type)
+                        {
+                            referencedColumnValid = false;
+                        }
+
+                        break;
+                    }
+                }
+
+                if (!referencedColumnExists)
+                {
+                    cout << "Error: Referenced column '"
+                         << column.referencedColumn
+                         << "' does not exist in table '"
+                         << column.referencedTable << "'." << endl;
+
+                    foreignKeyValid = false;
+                    break;
+                }
+
+                if (!referencedColumnValid)
+                {
+                    cout << "Error: Referenced column must have "
+                         << "PRIMARY KEY or UNIQUE constraint "
+                         << "and matching data type." << endl;
+
+                    foreignKeyValid = false;
+                    break;
+                }
+            }
+
+            if (!foreignKeyValid)
+            {
                 continue;
             }
 
