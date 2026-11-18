@@ -1319,6 +1319,7 @@ void DatabaseManager::start()
 
             // Keep only records that do not match the condition.
             vector<vector<string>> remainingRows;
+            vector<vector<string>> deletedRows;
             int deletedCount = 0;
 
             for (const auto &row : rows)
@@ -1386,11 +1387,107 @@ void DatabaseManager::start()
                 if (matches)
                 {
                     deletedCount++;
+                    deletedRows.push_back(row);
                 }
                 else
                 {
                     remainingRows.push_back(row);
                 }
+            }
+
+            // Check ON DELETE RESTRICT for foreign key references.
+            bool deletionRestricted = false;
+            string referencingTableName;
+
+            if (deletedCount > 0)
+            {
+                vector<string> tableNames =
+                    storage.getTables(activeDatabase);
+
+                // Find the referenced column in the current table.
+                size_t referencedColumnIndex = columns.size();
+
+                for (size_t i = 0; i < columns.size(); i++)
+                {
+                    if (columns[i].name == columnName)
+                    {
+                        referencedColumnIndex = i;
+                        break;
+                    }
+                }
+
+                // Check every table for foreign keys referencing this table.
+                for (const string &otherTable : tableNames)
+                {
+                    // Self-referencing foreign keys are not supported yet.
+                    if (otherTable == tableName)
+                        continue;
+
+                    vector<Column> otherColumns =
+                        storage.getTableColumns(
+                            activeDatabase, otherTable);
+
+                    for (size_t i = 0; i < otherColumns.size(); i++)
+                    {
+                        if (!otherColumns[i].isForeignKey ||
+                            otherColumns[i].referencedTable != tableName)
+                        {
+                            continue;
+                        }
+
+                        // Find the foreign key's referenced column.
+                        if (referencedColumnIndex == columns.size() ||
+                            otherColumns[i].referencedColumn != columnName)
+                        {
+                            continue;
+                        }
+
+                        vector<vector<string>> otherRows =
+                            storage.getRows(activeDatabase, otherTable);
+
+                        // Check whether any remaining table row references
+                        // a record that is about to be deleted.
+                        for (const auto &otherRow : otherRows)
+                        {
+                            if (i >= otherRow.size())
+                                continue;
+
+                            string foreignKeyValue = otherRow[i];
+
+                            for (const auto &deletedRow : deletedRows)
+                            {
+                                if (referencedColumnIndex >= deletedRow.size())
+                                    continue;
+
+                                if (foreignKeyValue ==
+                                    deletedRow[referencedColumnIndex])
+                                {
+                                    deletionRestricted = true;
+                                    referencingTableName = otherTable;
+                                    break;
+                                }
+                            }
+
+                            if (deletionRestricted)
+                                break;
+                        }
+
+                        if (deletionRestricted)
+                            break;
+                    }
+
+                    if (deletionRestricted)
+                        break;
+                }
+            }
+
+            if (deletionRestricted)
+            {
+                cout << "Error: Cannot delete record because table '"
+                     << referencingTableName
+                     << "' contains a foreign key reference."
+                     << endl;
+                continue;
             }
 
             // Save the remaining records.
