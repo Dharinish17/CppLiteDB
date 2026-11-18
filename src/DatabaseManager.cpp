@@ -1085,6 +1085,65 @@ void DatabaseManager::start()
                 }
             }
 
+            // Enforce FOREIGN KEY constraint during UPDATE
+            if (columns[updateIndex].isForeignKey &&
+                !matchingRows.empty() &&
+                !updateValue.empty())
+            {
+                // Get columns of the referenced table
+                vector<Column> referencedColumns =
+                    storage.getTableColumns(
+                        activeDatabase,
+                        columns[updateIndex].referencedTable);
+
+                // Find the referenced column index
+                size_t referencedIndex = referencedColumns.size();
+
+                for (size_t i = 0; i < referencedColumns.size(); i++)
+                {
+                    if (referencedColumns[i].name ==
+                        columns[updateIndex].referencedColumn)
+                    {
+                        referencedIndex = i;
+                        break;
+                    }
+                }
+
+                if (referencedIndex == referencedColumns.size())
+                {
+                    cout << "Error: Referenced column does not exist."
+                         << endl;
+                    continue;
+                }
+
+                // Get existing rows from the referenced table
+                vector<vector<string>> referencedRows =
+                    storage.getRows(
+                        activeDatabase,
+                        columns[updateIndex].referencedTable);
+
+                bool referenceFound = false;
+
+                // Check whether the updated value exists
+                for (const auto &referencedRow : referencedRows)
+                {
+                    if (referencedIndex < referencedRow.size() &&
+                        referencedRow[referencedIndex] == updateValue)
+                    {
+                        referenceFound = true;
+                        break;
+                    }
+                }
+
+                if (!referenceFound)
+                {
+                    cout << "Error: FOREIGN KEY constraint violation. "
+                         << "Referenced value does not exist."
+                         << endl;
+                    continue;
+                }
+            }
+
             // Apply the update after all validations pass.
             for (size_t index : matchingRows)
             {
