@@ -1144,6 +1144,88 @@ void DatabaseManager::start()
                 }
             }
 
+            // Enforce ON UPDATE RESTRICT for referenced columns.
+            bool updateRestricted = false;
+            string referencingTableName;
+
+            if (!matchingRows.empty())
+            {
+                vector<string> tableNames =
+                    storage.getTables(activeDatabase);
+
+                // Check every table for foreign keys referencing
+                // the column being updated.
+                for (const string &otherTable : tableNames)
+                {
+                    // Self-referencing foreign keys are not supported yet.
+                    if (otherTable == tableName)
+                        continue;
+
+                    vector<Column> otherColumns =
+                        storage.getTableColumns(
+                            activeDatabase, otherTable);
+
+                    // Find foreign key columns referencing our updated column.
+                    for (size_t i = 0; i < otherColumns.size(); i++)
+                    {
+                        if (!otherColumns[i].isForeignKey ||
+                            otherColumns[i].referencedTable != tableName ||
+                            otherColumns[i].referencedColumn != updateColumn)
+                        {
+                            continue;
+                        }
+
+                        vector<vector<string>> otherRows =
+                            storage.getRows(activeDatabase, otherTable);
+
+                        // Check each parent row that is about to be updated.
+                        for (size_t index : matchingRows)
+                        {
+                            if (updateIndex >= rows[index].size())
+                                continue;
+
+                            string oldValue = rows[index][updateIndex];
+
+                            // No restriction is needed if the value is unchanged.
+                            if (oldValue == updateValue)
+                                continue;
+
+                            // Check whether any child row references the old value.
+                            for (const auto &otherRow : otherRows)
+                            {
+                                if (i >= otherRow.size())
+                                    continue;
+
+                                if (otherRow[i] == oldValue)
+                                {
+                                    updateRestricted = true;
+                                    referencingTableName = otherTable;
+                                    break;
+                                }
+                            }
+
+                            if (updateRestricted)
+                                break;
+                        }
+
+                        if (updateRestricted)
+                            break;
+                    }
+
+                    if (updateRestricted)
+                        break;
+                }
+            }
+
+            if (updateRestricted)
+            {
+                cout << "Error: Cannot update referenced value because "
+                     << "table '" << referencingTableName
+                     << "' contains a foreign key reference."
+                     << endl;
+                continue;
+            }
+
             // Apply the update after all validations pass.
             for (size_t index : matchingRows)
             {
