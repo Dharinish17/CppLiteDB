@@ -216,6 +216,55 @@ void DatabaseManager::start()
                     {
                         column.unique = true;
                     }
+                    else if (constraint == "check")
+                    {
+                        column.hasCheck = true;
+
+                        // Extract the CHECK condition
+                        getline(columnStream, column.checkCondition);
+
+                        // Remove leading and trailing spaces
+                        size_t checkFirst =
+                            column.checkCondition.find_first_not_of(" \t");
+
+                        size_t checkLast =
+                            column.checkCondition.find_last_not_of(" \t");
+
+                        if (checkFirst == string::npos ||
+                            checkLast == string::npos)
+                        {
+                            valid = false;
+                            break;
+                        }
+
+                        column.checkCondition =
+                            column.checkCondition.substr(
+                                checkFirst,
+                                checkLast - checkFirst + 1);
+
+                        // Remove surrounding parentheses
+                        if (column.checkCondition.front() == '(' &&
+                            column.checkCondition.back() == ')')
+                        {
+                            column.checkCondition =
+                                column.checkCondition.substr(
+                                    1,
+                                    column.checkCondition.size() - 2);
+                        }
+                        else
+                        {
+                            valid = false;
+                            break;
+                        }
+
+                        if (column.checkCondition.empty())
+                        {
+                            valid = false;
+                            break;
+                        }
+
+                        break;
+                    }
                     else
                     {
                         valid = false;

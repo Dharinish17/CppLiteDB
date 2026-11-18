@@ -11,6 +11,8 @@ struct Column
     bool primaryKey = false;
     bool notNull = false;
     bool unique = false;
+    bool hasCheck = false;
+    std::string checkCondition;
 };
 
 class StorageManager

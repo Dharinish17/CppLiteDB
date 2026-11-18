@@ -123,6 +123,11 @@ bool StorageManager::createTable(const string &database, const string &tableName
             output << " UNIQUE";
         }
 
+        if (column.hasCheck)
+        {
+            output << " CHECK " << column.checkCondition;
+        }
+
         output << "\n";
     }
 
@@ -227,6 +232,28 @@ vector<Column> StorageManager::getTableColumns(
                     else if (constraint == "UNIQUE")
                     {
                         column.unique = true;
+                    }
+                    else if (constraint == "CHECK")
+                    {
+                        column.hasCheck = true;
+
+                        // Read the complete CHECK condition
+                        getline(ss, column.checkCondition);
+
+                        // Remove leading spaces
+                        size_t first = column.checkCondition.find_first_not_of(" \t");
+
+                        if (first != string::npos)
+                        {
+                            column.checkCondition =
+                                column.checkCondition.substr(first);
+                        }
+                        else
+                        {
+                            column.checkCondition.clear();
+                        }
+
+                        break;
                     }
                 }
 
