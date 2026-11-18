@@ -834,6 +834,103 @@ void DatabaseManager::start()
                 }
             }
 
+            // Enforce CHECK constraint during UPDATE
+            if (columns[updateIndex].hasCheck &&
+                !matchingRows.empty() &&
+                !updateValue.empty())
+            {
+                string condition = columns[updateIndex].checkCondition;
+
+                // Identify the comparison operator
+                string operators[] = {">=", "<=", "!=", "=", ">", "<"};
+
+                string op;
+                size_t operatorPosition = string::npos;
+
+                for (const string &candidate : operators)
+                {
+                    operatorPosition = condition.find(candidate);
+
+                    if (operatorPosition != string::npos)
+                    {
+                        op = candidate;
+                        break;
+                    }
+                }
+
+                bool checkPassed = false;
+
+                if (operatorPosition != string::npos)
+                {
+                    // Extract the expected value
+                    string left = condition.substr(0, operatorPosition);
+                    string right = condition.substr(
+                        operatorPosition + op.length());
+
+                    // Remove leading and trailing spaces
+                    auto trim = [](string &value)
+                    {
+                        size_t first = value.find_first_not_of(" \t");
+                        size_t last = value.find_last_not_of(" \t");
+
+                        if (first == string::npos)
+                        {
+                            value.clear();
+                            return;
+                        }
+
+                        value = value.substr(first, last - first + 1);
+                    };
+
+                    trim(left);
+                    trim(right);
+
+                    // Ensure the condition refers to the updated column
+                    if (left == columns[updateIndex].name)
+                    {
+                        try
+                        {
+                            size_t actualLength = 0;
+                            size_t expectedLength = 0;
+
+                            long long actualValue =
+                                stoll(updateValue, &actualLength);
+
+                            long long expectedValue =
+                                stoll(right, &expectedLength);
+
+                            if (actualLength == updateValue.length() &&
+                                expectedLength == right.length())
+                            {
+                                if (op == ">=")
+                                    checkPassed = actualValue >= expectedValue;
+                                else if (op == "<=")
+                                    checkPassed = actualValue <= expectedValue;
+                                else if (op == "!=")
+                                    checkPassed = actualValue != expectedValue;
+                                else if (op == "=")
+                                    checkPassed = actualValue == expectedValue;
+                                else if (op == ">")
+                                    checkPassed = actualValue > expectedValue;
+                                else if (op == "<")
+                                    checkPassed = actualValue < expectedValue;
+                            }
+                        }
+                        catch (...)
+                        {
+                            checkPassed = false;
+                        }
+                    }
+                }
+
+                if (!checkPassed)
+                {
+                    cout << "Error: CHECK constraint violation."
+                         << endl;
+                    continue;
+                }
+            }
+
             // Apply the update after all validations pass.
             for (size_t index : matchingRows)
             {
