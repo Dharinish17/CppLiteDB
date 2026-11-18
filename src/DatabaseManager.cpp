@@ -1654,6 +1654,32 @@ void DatabaseManager::start()
             trim(selectedColumnText);
             trim(tableName);
 
+            // Detect DISTINCT keyword.
+            bool isDistinct = false;
+
+            if (selectedColumnText.rfind("distinct ", 0) == 0)
+            {
+                isDistinct = true;
+
+                selectedColumnText =
+                    selectedColumnText.substr(9);
+
+                trim(selectedColumnText);
+            }
+            else if (selectedColumnText == "distinct")
+            {
+                cout << "Error: DISTINCT requires a column name."
+                     << endl;
+                continue;
+            }
+
+            if (selectedColumnText.empty())
+            {
+                cout << "Error: No columns specified in SELECT."
+                     << endl;
+                continue;
+            }
+
             // Get all table columns.
             vector<Column> columns = storage.getTableColumns(
                 activeDatabase, tableName);
@@ -1758,6 +1784,14 @@ void DatabaseManager::start()
                         continue;
                     }
                 }
+            }
+
+            // DISTINCT with aggregate functions is not supported yet.
+            if (isDistinct && isAggregate)
+            {
+                cout << "Error: DISTINCT with aggregate functions "
+                     << "is not supported yet." << endl;
+                continue;
             }
 
             // Determine which columns should be displayed.
@@ -2102,6 +2136,43 @@ void DatabaseManager::start()
                 }
 
                 rows = filteredRows;
+            }
+
+            // Remove duplicate records when DISTINCT is specified.
+            if (isDistinct)
+            {
+                vector<vector<string>> distinctKeys;
+                vector<vector<string>> distinctRows;
+
+                for (const auto &row : rows)
+                {
+                    vector<string> currentKey;
+
+                    // Build a key using only the selected columns.
+                    for (size_t index : selectedIndexes)
+                    {
+                        if (index < row.size())
+                        {
+                            currentKey.push_back(row[index]);
+                        }
+                        else
+                        {
+                            currentKey.push_back("");
+                        }
+                    }
+
+                    // Check whether this combination already exists.
+                    if (find(
+                            distinctKeys.begin(),
+                            distinctKeys.end(),
+                            currentKey) == distinctKeys.end())
+                    {
+                        distinctKeys.push_back(currentKey);
+                        distinctRows.push_back(row);
+                    }
+                }
+
+                rows = distinctRows;
             }
 
             // Apply ORDER BY if provided.
