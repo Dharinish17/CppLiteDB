@@ -340,6 +340,95 @@ bool StorageManager::insertRow(
                     return false;
             }
         }
+
+        // Enforce CHECK constraint
+        if (columns[i].hasCheck && !values[i].empty())
+        {
+            string condition = columns[i].checkCondition;
+
+            // Identify the comparison operator
+            string operators[] = {">=", "<=", "!=", "=", ">", "<"};
+
+            string op;
+            size_t operatorPosition = string::npos;
+
+            for (const string &candidate : operators)
+            {
+                operatorPosition = condition.find(candidate);
+
+                if (operatorPosition != string::npos)
+                {
+                    op = candidate;
+                    break;
+                }
+            }
+
+            if (operatorPosition == string::npos)
+                return false;
+
+            // Extract the expected value
+            string left = condition.substr(0, operatorPosition);
+            string right = condition.substr(
+                operatorPosition + op.length());
+
+            // Remove surrounding spaces
+            auto trim = [](string &value)
+            {
+                size_t first = value.find_first_not_of(" \t");
+                size_t last = value.find_last_not_of(" \t");
+
+                if (first == string::npos)
+                {
+                    value.clear();
+                    return;
+                }
+
+                value = value.substr(first, last - first + 1);
+            };
+
+            trim(left);
+            trim(right);
+
+            // Ensure the condition refers to the current column
+            if (left != columns[i].name)
+                return false;
+
+            // Evaluate numeric CHECK conditions
+            try
+            {
+                size_t actualLength = 0;
+                size_t expectedLength = 0;
+
+                long long actualValue = stoll(values[i], &actualLength);
+                long long expectedValue = stoll(right, &expectedLength);
+
+                if (actualLength != values[i].length() ||
+                    expectedLength != right.length())
+                    return false;
+
+                bool checkPassed = false;
+
+                if (op == ">=")
+                    checkPassed = actualValue >= expectedValue;
+                else if (op == "<=")
+                    checkPassed = actualValue <= expectedValue;
+                else if (op == "!=")
+                    checkPassed = actualValue != expectedValue;
+                else if (op == "=")
+                    checkPassed = actualValue == expectedValue;
+                else if (op == ">")
+                    checkPassed = actualValue > expectedValue;
+                else if (op == "<")
+                    checkPassed = actualValue < expectedValue;
+
+                if (!checkPassed)
+                    return false;
+            }
+            catch (...)
+            {
+                return false;
+            }
+        }
     }
 
     // Prepare the row.
