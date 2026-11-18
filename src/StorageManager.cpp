@@ -449,6 +449,61 @@ bool StorageManager::insertRow(
         }
     }
 
+    // Enforce FOREIGN KEY constraint
+    for (size_t i = 0; i < columns.size(); i++)
+    {
+        if (!columns[i].isForeignKey || values[i].empty())
+        {
+            continue;
+        }
+
+        // Get columns of the referenced table
+        vector<Column> referencedColumns =
+            getTableColumns(
+                database,
+                columns[i].referencedTable);
+
+        // Find the referenced column index
+        size_t referencedIndex = referencedColumns.size();
+
+        for (size_t j = 0; j < referencedColumns.size(); j++)
+        {
+            if (referencedColumns[j].name ==
+                columns[i].referencedColumn)
+            {
+                referencedIndex = j;
+                break;
+            }
+        }
+
+        if (referencedIndex == referencedColumns.size())
+        {
+            return false;
+        }
+
+        // Get existing rows from the referenced table
+        vector<vector<string>> referencedRows =
+            getRows(database, columns[i].referencedTable);
+
+        bool referenceFound = false;
+
+        // Check whether the referenced value exists
+        for (const auto &referencedRow : referencedRows)
+        {
+            if (referencedIndex < referencedRow.size() &&
+                referencedRow[referencedIndex] == values[i])
+            {
+                referenceFound = true;
+                break;
+            }
+        }
+
+        if (!referenceFound)
+        {
+            return false;
+        }
+    }
+
     // Prepare the row.
     string row;
 
